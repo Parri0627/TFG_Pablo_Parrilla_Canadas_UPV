@@ -1,0 +1,67 @@
+---
+title: "Análisis Inicial de la ETSINF"
+author: "Pablo Parrilla Cañadas"
+date: "2025-03-05"
+output: html_document
+---
+
+```{r}
+library(readr)
+library(ggplot2)
+```
+
+Cargamos el dataset de informática.
+
+```{r}
+load("../Datos/Generados/informatica.Rdata")
+head(informatica)
+```
+
+Vamos a ver un poco por encima cómo son los datos.
+
+```{r}
+summary(informatica)
+```
+
+Vamos a eliminar la columna del título, no nos sirve al saber que es informática. 
+
+```{r}
+inicio_etsinf=select(informatica, -c(tit_hash,titnom))
+```
+
+Vamos a hacer un estudio rápido sobre todos los estudiantes que entrar a la escuela, antes de filtrar por aquellos que la han dejado.
+
+
+```{r}
+generar_boxplots=function(df) {
+  # Filtrar solo columnas numéricas (integer o double)
+  columnas_numericas <- names(df)[sapply(df, function(col) is.numeric(col))]
+  
+  # Si no hay columnas numéricas, mostrar un mensaje
+  if (length(columnas_numericas) == 0) {
+    message("No hay columnas numéricas en el dataframe.")
+    return(NULL)
+  }
+  
+  # Crear gráficos para cada columna numérica
+  for (columna in columnas_numericas) {
+    print(
+      ggplot(df, aes(x = "", y = .data[[columna]])) +
+        geom_boxplot(fill = "steelblue", color = "black") +
+        labs(title = paste("Boxplot de", columna), y = columna) +
+        theme_minimal()
+    )
+  }
+}
+
+# Ejemplo de uso con un dataframe
+dataset_ordenado <- data.frame(
+  A = c(1.5, 2.3, 3.7, 4.1, NA, 5.6),
+  B = c(10, 20, 30, 40, 50, 60),
+  C = c("Texto", "Otro", "Más", "Ejemplo", NA, "Test"),
+  D = c(100.5, 200.3, 150.8, 180.2, 90.1, 110.7)
+)
+
+generar_boxplots(dataset_ordenado)  # Llamada a la función
+```
+

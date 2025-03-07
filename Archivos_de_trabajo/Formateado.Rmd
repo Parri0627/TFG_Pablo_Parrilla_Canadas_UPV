@@ -14,10 +14,10 @@ library(dplyr)
 Vamos a cargar todos los conjuntos de datos
 
 ```{r}
-dataset=read.csv("dataset_2024.csv",sep = ";")
-asignaturas=read.csv("asignaturas_2024.csv",sep=";")
-titulaciones=read.csv("titulaciones_2024.csv",sep=";")
-estudiantes=read.csv("estudiantes_2024_rev.csv",sep=";")
+dataset=read.csv("../Datos/Iniciales/dataset_2024.csv",sep = ";")
+asignaturas=read.csv("../Datos/Iniciales/asignaturas_2024.csv",sep=";")
+titulaciones=read.csv("../Datos/Iniciales/titulaciones_2024.csv",sep=";")
+estudiantes=read.csv("../Datos/Iniciales/estudiantes_2024_rev.csv",sep=";")
 head(dataset)
 ```
 
@@ -86,11 +86,11 @@ Por tro lado, vamos a hacer un filtro para poder empezar a trabajar. Primero, no
 informatica=subset(dataset_ordenado,tit_hash=="c75de23d89df")
 head(informatica)
 
-save(dataset_ordenado,file="Inicial_completo.Rdata")
-write.csv(dataset_ordenado,file="inicial.csv")
+save(dataset_ordenado,file="../Datos/Generados/Inicial_completo.Rdata")
+write.csv(dataset_ordenado,file="../Datos/Generados/inicial.csv")
 
-save(informatica,file="informatica.Rdata")
-write.csv(informatica, file="informatica_inicial.csv")
+save(informatica,file="../Datos/Generados/informatica.Rdata")
+write.csv(informatica, file="../Datos/Generados/informatica_inicial.csv")
 rm(list = ls())
 ```
 
