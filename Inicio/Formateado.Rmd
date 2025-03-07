@@ -1,0 +1,99 @@
+---
+title: "Formateado Inicial"
+author: "Pablo Parrilla Cañadas"
+date: "2025-03-03"
+output: html_document
+---
+
+```{r}
+library(readxl)
+library(readr)
+library(dplyr)
+```
+
+Vamos a cargar todos los conjuntos de datos
+
+```{r}
+dataset=read.csv("dataset_2024.csv",sep = ";")
+asignaturas=read.csv("asignaturas_2024.csv",sep=";")
+titulaciones=read.csv("titulaciones_2024.csv",sep=";")
+estudiantes=read.csv("estudiantes_2024_rev.csv",sep=";")
+head(dataset)
+```
+
+Para tener toda la información en un solo dataset, aunque sea pesado. En caso de que sea demasiado pesado, separaremos el dataset, pero vamos primero a intentar tener todo unificado y, además, ordenado. Mantendremos los hash por el momento.
+
+
+```{r}
+head(estudiantes)
+dataset=merge.data.frame(dataset,select(titulaciones, c("tit_hash","titnom")))
+
+dataset=merge.data.frame(dataset,select(asignaturas,c("asi_hash","asinom")))
+
+dataset=merge.data.frame(dataset,estudiantes)
+
+dataset_ordenado=dataset[,c(1:3,137:143,4:136)]
+a=dataset_ordenado
+head(dataset_ordenado)
+```
+
+
+
+Pasamos a una tarea importante para los análisis: el formateo de los datos. Primeramente, vamos a ver qué datos no poseen el formato requerido para poder asignarles el tipo de datos correspondiente.
+
+```{r}
+head(dataset_ordenado)
+```
+
+Como podemos apreciar, las columnas mal formateadas son aquellas que, debiendo tener datos de tipo "double", se han categorizado como "character" al tener una , como separador en lugar de un punto. Además, la fecha en la que se consiguieron los datos no nos será útil si no disponemos de datos de otra fecha, pero repararemos su formato igualmente. Iniciaremos con eso. 
+
+```{r}
+convertir_columnas_especificas <- function(df, columnas_a_convertir) {
+  df[columnas_a_convertir] <- lapply(df[columnas_a_convertir], function(col) {
+    col <- as.character(col)  # Asegurar que la columna sea texto para reemplazo
+    col <- trimws(col)  # Eliminar espacios en blanco antes y después
+    col <- gsub(",", ".", col, fixed = TRUE)  # Reemplazar comas por puntos
+    suppressWarnings(num_col <- as.double(col))
+    
+    if (any(!is.na(num_col))) {
+      return(num_col)
+    }
+    
+    return(col)
+  })
+  return(df)
+}
+
+columnas_a_convertir <- c(13, 28, 33:55, 56, 61:68, 70:72, 73,78:80)
+
+dataset_ordenado <- convertir_columnas_especificas(dataset_ordenado, columnas_a_convertir)
+head(dataset_ordenado)
+```
+
+Ahora, eliminaremos las columnas que sean completamente NA, ya que no nos sirven para el estudio inicial que haremos. En el futuro, es probable que tengamos otra versión de los datos en la cual sí sean útiles. 
+
+```{r}
+dataset_ordenado=dataset_ordenado[, colSums(!is.na(dataset_ordenado) & dataset_ordenado != "") > 0, drop = FALSE]
+dataset_ordenado$fecha_datos <- as.POSIXct(dataset_ordenado$fecha_datos, format="%Y-%m-%d %H:%M:%S")
+```
+
+
+Ahora, con el dataset formateado, guardaremos el archivo en un Rdata para que sea más ligero. Lo llamaremos "Inicial_completo" y limpiados el entorno, ya que hay varios dataframes pesados creados. Además, vamos a guardarlo en un .csv, "inicial.csv" por si es necesario hacer alguna comprobación a mano. 
+
+Por tro lado, vamos a hacer un filtro para poder empezar a trabajar. Primero, nos centraremos en la escuela de informática, ya que es la escuela que más dominamos.
+
+```{r}
+informatica=subset(dataset_ordenado,tit_hash=="c75de23d89df")
+head(informatica)
+
+save(dataset_ordenado,file="Inicial_completo.Rdata")
+write.csv(dataset_ordenado,file="inicial.csv")
+
+save(informatica,file="informatica.Rdata")
+write.csv(informatica, file="informatica_inicial.csv")
+rm(list = ls())
+```
+
+
+
+Teniendo ya el dataset listo y el subconjunto de informática, damos por concluido el formateado de los primeros datos. El siguiente archivo será el análisis inicial de la escuela de informática. 
