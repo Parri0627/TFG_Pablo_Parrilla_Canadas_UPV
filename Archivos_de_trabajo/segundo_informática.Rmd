@@ -1,0 +1,194 @@
+---
+title: "2º Análisis Informática"
+author: "Pablo Parrilla Cañadas"
+date: "2025-04-07"
+output: html_document
+---
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+load("../Datos/Segundo_intento/Datasets.RData")
+```
+
+```{r}
+sum(table(format(as.POSIXct(abandono$fecha_mas_frecuente[abandono$abandono == 1]), "%Y %m")))
+```
+
+Vemos que las fechas más frecuentes son junio, 
+
+```{r}
+table(abandono$abandono)
+table(format(as.POSIXct(abandono$fecha_mas_frecuente[abandono$abandono == 1]), "%Y %m"))
+
+```
+Las fechas más frecuentes son al empezar y terminar el curso, septiembre y julio respectivamente. 
+
+Filtramos por informática de Alcoy y echamos un vistazo. 
+
+
+```{r}
+#Informática 0fecf9247f3d
+
+creditos_inf= creditos[creditos$tit_hash=="0fecf9247f3d",]
+demografía_inf= demografía[demografía$tit_hash=="0fecf9247f3d",]
+poliformat_inf= poliformat[poliformat$tit_hash=="0fecf9247f3d",]
+
+```
+
+
+```{r}
+lineas_multiple=poliformat_enterolineas_multiple <- function(df, columnas, titulo) {
+  # Verificar si la columna "abandono" existe
+  if (!"abandono" %in% names(df)) {
+    stop("La columna 'abandono' no existe en el dataframe.")
+  }
+
+  # Convertir columnas numéricas a nombres si hace falta
+  if (is.numeric(columnas)) {
+    columnas <- names(df)[columnas]
+  }
+
+  # Reemplazar NA por 0
+  df$abandono <- ifelse(is.na(df$abandono), 0, df$abandono)
+
+  # Seleccionar columnas
+  df_seleccionado <- df[, c(columnas, "abandono"), drop = FALSE]
+  df_seleccionado <- df_seleccionado[sapply(df_seleccionado, is.numeric)]
+
+  df_valores <- df_seleccionado[, setdiff(names(df_seleccionado), "abandono"), drop = FALSE]
+  if (ncol(df_valores) == 0) {
+    message("No hay columnas numéricas en la selección.")
+    return(NULL)
+  }
+
+  df_valores$ID <- 1:nrow(df_valores)
+  df_valores$abandono <- df_seleccionado$abandono
+
+  df_melt <- reshape2::melt(df_valores, id.vars = c("ID", "abandono"),
+                            variable.name = "Variable", value.name = "Valor")
+
+  df_negro <- df_melt[df_melt$abandono == 0, ]
+  df_rojo  <- df_melt[df_melt$abandono == 1, ]
+  print(dim(df_rojo))
+
+  ggplot() +
+    geom_line(data = df_negro, aes(x = Variable, y = Valor, group = ID),
+              color = "black", alpha = 0.3, size = 0.5) +
+    geom_line(data = df_rojo, aes(x = Variable, y = Valor, group = ID),
+              color = "red", alpha = 0.8, size = 0.7) +
+    labs(title = paste0("Gráfico de Líneas: ", titulo),
+         x = "Variables (Columnas)", y = "Valores") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          panel.grid.minor = element_blank())
+}
+
+
+lineas_multiple(poliformat_inf,c(4:10),"Eventos de Poliformat x estudiante")
+lineas_multiple(poliformat_inf,c(11:17),"Sesiones iniciadas en Poliformat x estudiante")
+lineas_multiple(poliformat_inf,c(18:24),"Visitas a Poliformat x estudiante")
+lineas_multiple(poliformat_inf,c(25:31),"Minutos Totales x estudiante")
+lineas_multiple(poliformat_inf,c(32:38),"Recursos abiertos x estudiante")
+lineas_multiple(poliformat_inf,c(39:45),"Eventos tenidos x estudiante")
+lineas_multiple(poliformat_inf,c(46:50),"Tareas entregadas x estudiante")
+lineas_multiple(poliformat_inf,c(51:55),"Tests entregados x estudiante")
+```
+
+```{r}
+lineas_multiple(demografía_inf,c(21:27),"Wifi x estudiante")
+colnames(demografía)
+
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(forcats)
+
+graficos_barras_por_variable <- function(df, columnas) {
+  # Asegurar que abandono es factor para colorear
+  df$abandono <- factor(ifelse(is.na(df$abandono), 0, df$abandono),
+                        levels = c(0, 1), labels = c("No abandona", "Abandona"))
+  
+  # Si columnas son numéricas (índices), convertir a nombres
+  if (is.numeric(columnas)) {
+    columnas <- names(df)[columnas]
+  }
+  
+  for (col in columnas) {
+    variable <- df[[col]]
+    
+    # Si es character → factor con NA explícito
+    if (is.character(variable)) {
+      variable <- fct_explicit_na(as.factor(variable), na_level = "Desconocido")
+    
+    # Si es numérica
+    } else if (is.numeric(variable)) {
+      if (all(is.na(variable))) {
+        variable <- factor(rep("0", nrow(df)))  # Todos NA
+      } else if (n_distinct(variable, na.rm = TRUE) > 15) {
+        next  # Demasiados valores únicos → ignorar
+      } else {
+        variable <- fct_explicit_na(as.factor(variable), na_level = "Desconocido")
+      }
+    
+    # Otras clases (logical, etc.)
+    } else {
+      variable <- fct_explicit_na(as.factor(variable), na_level = "Desconocido")
+    }
+    
+    # Crear data frame temporal para graficar
+    df_plot <- data.frame(Variable = variable, Abandono = df$abandono)
+    
+    # Graficar
+    print(
+      ggplot(df_plot, aes(x = Variable, fill = Abandono)) +
+        geom_bar(position = "dodge") +
+        labs(
+          title = paste("Frecuencia por categoría -", col),
+          x = col,
+          y = "Frecuencia",
+          fill = "Abandono"
+        ) +
+        theme_minimal() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    )
+  }
+}
+
+graficos_barras_por_variable(demografía,c(4:10,13:20))
+colnames(demografía)
+```
+
+
+```{r}
+library(tidyr)
+library(ggplot2)
+
+df_long <- demografía_inf %>%
+  pivot_longer(cols = c(nota10, nota14), names_to = "variable", values_to = "valor")
+
+ggplot(df_long, aes(x = valor, fill = variable)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Densidad de nota10 y nota14", x = "Valor", y = "Densidad") +
+  theme_minimal()
+
+```
+
+```{r}
+
+df_long <- demografía_inf %>%
+  mutate(nota14 = (nota14 / 14) * 10) %>%  # Escalar nota14 sobre 10
+  pivot_longer(cols = c(nota10, nota14), names_to = "variable", values_to = "valor")
+
+ggplot(df_long, aes(x = valor, fill = variable)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Densidad de nota10 y nota14 (escalada)", x = "Valor sobre 10", y = "Densidad") +
+  theme_minimal()
+
+
+```
+

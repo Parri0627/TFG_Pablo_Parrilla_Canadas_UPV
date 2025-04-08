@@ -21,7 +21,7 @@ estudiantes=read.csv("../Datos/Iniciales/estudiantes_2024_rev.csv",sep=";")
 head(dataset)
 ```
 
-Para tener toda la información en un solo dataset, aunque sea pesado. En caso de que sea demasiado pesado, separaremos el dataset, pero vamos primero a intentar tener todo unificado y, además, ordenado. Mantendremos los hash por el momento.
+Para tener toda la información en un solo dataset, aunque sea pesado. Más adelante haremos las separaciones correspondientes. 
 
 
 ```{r}
@@ -33,8 +33,6 @@ dataset=merge.data.frame(dataset,select(asignaturas,c("asi_hash","asinom")))
 dataset=merge.data.frame(dataset,estudiantes)
 
 dataset_ordenado=dataset[,c(1:3,137:143,4:136)]
-a=dataset_ordenado
-head(dataset_ordenado)
 ```
 
 
@@ -42,17 +40,18 @@ head(dataset_ordenado)
 Pasamos a una tarea importante para los análisis: el formateo de los datos. Primeramente, vamos a ver qué datos no poseen el formato requerido para poder asignarles el tipo de datos correspondiente.
 
 ```{r}
-head(dataset_ordenado)
+head(dataset_ordenado[])
 ```
 
 Como podemos apreciar, las columnas mal formateadas son aquellas que, debiendo tener datos de tipo "double", se han categorizado como "character" al tener una , como separador en lugar de un punto. Además, la fecha en la que se consiguieron los datos no nos será útil si no disponemos de datos de otra fecha, pero repararemos su formato igualmente. Iniciaremos con eso. 
 
 ```{r}
+
 convertir_columnas_especificas <- function(df, columnas_a_convertir) {
   df[columnas_a_convertir] <- lapply(df[columnas_a_convertir], function(col) {
-    col <- as.character(col)  # Asegurar que la columna sea texto para reemplazo
-    col <- trimws(col)  # Eliminar espacios en blanco antes y después
-    col <- gsub(",", ".", col, fixed = TRUE)  # Reemplazar comas por puntos
+    col <- as.character(col)
+    col <- trimws(col)
+    col <- gsub(",", ".", col, fixed = TRUE)  
     suppressWarnings(num_col <- as.double(col))
     
     if (any(!is.na(num_col))) {
@@ -64,7 +63,7 @@ convertir_columnas_especificas <- function(df, columnas_a_convertir) {
   return(df)
 }
 
-columnas_a_convertir <- c(13, 28, 33:55, 56, 61:68, 70:72, 73,78:80)
+columnas_a_convertir <- c(13, 28, 33:55, 56, 61:68, 70:72, 73,79:143)
 
 dataset_ordenado <- convertir_columnas_especificas(dataset_ordenado, columnas_a_convertir)
 head(dataset_ordenado)
@@ -75,25 +74,132 @@ Ahora, eliminaremos las columnas que sean completamente NA, ya que no nos sirven
 ```{r}
 dataset_ordenado=dataset_ordenado[, colSums(!is.na(dataset_ordenado) & dataset_ordenado != "") > 0, drop = FALSE]
 dataset_ordenado$fecha_datos <- as.POSIXct(dataset_ordenado$fecha_datos, format="%Y-%m-%d %H:%M:%S")
+dataset_ordenado$baja_fecha=as.POSIXct(dataset_ordenado$baja_fecha, format="%Y-%m-%d")
+```
+
+La cantidad de columnas con las que hay que trabajar es descomunal, por lo que vamos a dividirlas para poder reordenarlas en el dataset.
+
+```{r}
+#estudiantes=select(dataset_ordenado,c(1:12,15:26,30:31,55:56,58))
+poliformat=select(dataset_ordenado,c(1:5,79:137))
+head(poliformat)
+```
+
+Además, disponemos de datos de asignaturas del primer cuatrimestre, por lo que no tiene sentido mantener asignaturas del 2º cuatrimestre.
+
+```{r}
 ```
 
 
-Ahora, con el dataset formateado, guardaremos el archivo en un Rdata para que sea más ligero. Lo llamaremos "Inicial_completo" y limpiados el entorno, ya que hay varios dataframes pesados creados. Además, vamos a guardarlo en un .csv, "inicial.csv" por si es necesario hacer alguna comprobación a mano. 
+
+```{r}
+filtrar_columnas_por_palabra <- function(df, palabra) {
+  columnas_filtradas <- grep(palabra, names(df), value = TRUE, ignore.case = TRUE)
+  
+  df_filtrado <- df[, columnas_filtradas, drop = FALSE]
+  
+  return(df_filtrado)
+}
+
+#a=dataset_ordenado
+
+eventos=filtrar_columnas_por_palabra(poliformat, "pft_events")
+logged=filtrar_columnas_por_palabra(poliformat, "logged")
+visits=filtrar_columnas_por_palabra(poliformat, "visits")
+minutes=filtrar_columnas_por_palabra(poliformat, "minutes")
+wifi=filtrar_columnas_por_palabra(poliformat, "wifi")
+resource_events=filtrar_columnas_por_palabra(poliformat, "resource_events")
+resource_days=filtrar_columnas_por_palabra(poliformat, "resource_days")
+assignment=filtrar_columnas_por_palabra(poliformat, "assignment")
+test=filtrar_columnas_por_palabra(poliformat, "test")
+
+#Con las columnas finales ordenadas, todo será más sencillo
+dataset_ordenado=dataset_ordenado[,1:78]
+dataset_ordenado=cbind(dataset_ordenado,eventos,logged,visits,minutes,wifi,resource_days,resource_events,assignment,test)
+
+#Formateamos a 0 para poder mostrar gráficas
+dataset_ordenado[,79:137 ] <- replace(dataset_ordenado[,79:137 ], is.na(dataset_ordenado[,79:137 ]), 0)
+```
+
+También, vamos a indentificar a los alumnos que han dejado la carrera. Vamos a poner el umbral en 5 asignaturas que tienen fecha de baja de la misma, asumiendo que los alumnos que se desmatriculan de 76 asignaturas han abandonado los estudios. Lo dejamos así, ya que se requiere una alta cantidad de recursos de la que no dispongo para poder concatenar este dataset.  
+
+```{r}
+suma_abandonos= dataset_ordenado %>% group_by(dni_hash,tit_hash,baja_fecha) %>% summarise(asi_left=sum(!is.na(baja_fecha)))
+suma_abandonos$abandono=ifelse(suma_abandonos$asi_left >5, 1,0)
+abandono=suma_abandonos
+```
+
+Vamos también a añadir al dataframe con unas nuevas columnas referidas a las acciones de poliformaT, las cuáles son por asignatura (a diferencia del WiFi, que es común a todas las asignaturas al ser un dato del estudiante y no del entorno como tal)
+
+```{r}
+dataset_ordenado$evento_poliformat_asg=rowSums(dataset_ordenado[,79:85])
+dataset_ordenado$loggins_asg=rowSums(dataset_ordenado[,86:92])
+dataset_ordenado$visitas_asg=rowSums(dataset_ordenado[,93:99])
+dataset_ordenado$minutos_asg=rowSums(dataset_ordenado[,100:106])
+dataset_ordenado$n_res_day_asg=rowSums(dataset_ordenado[,114:120])
+dataset_ordenado$n_res_events_asg=rowSums(dataset_ordenado[,121:127])
+dataset_ordenado$asign_asg=rowSums(dataset_ordenado[,128:132])
+dataset_ordenado$test_asg=rowSums(dataset_ordenado[,132:137])
+colnames(dataset_ordenado)
+```
+
+Ahora, vamos a sacar las mismas variables, pero referidas a cada estudiante.
+
+```{r}
+columnas_a_sumar=colnames(dataset_ordenado[,c(79:106,114:137)])
+
+dataset_ordenado=dataset_ordenado %>%
+  group_by(dni_hash) %>%
+  mutate(across(all_of(columnas_a_sumar), ~ sum(.x, na.rm = TRUE), .names = "{.col}_est")) %>%
+  ungroup()
+```
+
+Finalmente, hay muchos datos que son 0 en lo que respecta a los datos de poliformat. Es decir, que esas asignaturas no han tenido ningún tipo de actividad porque son del siguiente cuatri. Esto nos dificulta estudiar la media y el seguimiento de los alumnos que dejan la carrera, pues se mezcla con las asignaturas en las que, independientemente de que haya o no dejado la carrera, no es posible que haya actividad. Al tener ya el filtro de los estudiantes que han abandono, no hay ningún problema.
+
+#```{r}
+dataset_ordenado <- dataset_ordenado[!apply(dataset_ordenado, 1, function(fila) {
+  all(fila[136:145] <3) && fila[148] < 2 && fila[149] < 30
+}), ]
+#```
+
+
+Ahora, con el dataset formateado y los alumnos que han dejado la carrera, guardaremos los archivos en Rdata para que sea más ligero. Llamaremos a dataset_ordenado "inicial.csv"y "Inicial_completo.Rdata", mientras que al dataset de abandono lo llamaremos "abandono.csv" y "abandono.Rdata". 
+
+```{r}
+save(dataset_ordenado,file="../Datos/Generados/Inicial_completo.Rdata")
+write.csv(dataset_ordenado,file="../Datos/Generados/inicial.csv")
+
+save(abandono,file="../Datos/Generados/abandono.Rdata")
+write.csv(abandono,file="../Datos/Generados/abandono.csv")
+```
+
+Además, para futuros análisis, vamos a separar todo en tres datasets diferentes: Actividad por asignaturas, que es todo lo referido a la actividad en poliformat de los diferentes estudiantes en cada asignatura; datos demográficos, que corresponden a los datos personales de los estudiantes; y datos relacionados con los créditos, referidos a toda la parte académica que están cursando. 
+
+```{r}
+demografia=dataset_ordenado[,1:21]
+head(dataset_ordenado[,1:21])
+```
+
+
 
 Por tro lado, vamos a hacer un filtro para poder empezar a trabajar. Primero, nos centraremos en la escuela de informática, ya que es la escuela que más dominamos.
+
 
 ```{r}
 informatica=subset(dataset_ordenado,tit_hash=="c75de23d89df")
 head(informatica)
 
-save(dataset_ordenado,file="../Datos/Generados/Inicial_completo.Rdata")
-write.csv(dataset_ordenado,file="../Datos/Generados/inicial.csv")
 
-save(informatica,file="../Datos/Generados/informatica.Rdata")
-write.csv(informatica, file="../Datos/Generados/informatica_inicial.csv")
-rm(list = ls())
+
+
+save(informatica,file="../Datos/Generados/Informatica/informatica.Rdata")
+write.csv(informatica, file="../Datos/Generados/Informatica/informatica_inicial.csv")
+#rm(list = ls())
+#load("../Datos/Generados/Inicial_completo.Rdata")
 ```
 
 
 
 Teniendo ya el dataset listo y el subconjunto de informática, damos por concluido el formateado de los primeros datos. El siguiente archivo será el análisis inicial de la escuela de informática. 
+
+

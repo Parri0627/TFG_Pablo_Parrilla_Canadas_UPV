@@ -8,14 +8,24 @@ output: html_document
 ```{r}
 library(readr)
 library(ggplot2)
+library(reshape2)
 ```
 
 Cargamos el dataset de informática.
 
 ```{r}
-load("../Datos/Generados/informatica.Rdata")
+load("../Datos/Generados/Informatica/informatica.Rdata")
 head(informatica)
 ```
+
+Vamos a cargar los datos de abandono y, al haber muchas menos filas, podremos concatenarlo. 
+
+```{r}
+load("../Datos/Generados/abandono.Rdata")
+informatica=merge.data.frame(informatica,abandono)
+```
+
+
 
 Vamos a ver un poco por encima cómo son los datos.
 
@@ -23,16 +33,23 @@ Vamos a ver un poco por encima cómo son los datos.
 summary(informatica)
 ```
 
-Vamos a eliminar la columna del título, no nos sirve al saber que es informática. 
+Vamos a eliminar la columna del título, no nos sirve al saber que es informática del campus de Alcoy.
 
 ```{r}
 inicio_etsinf=select(informatica, -c(tit_hash,titnom))
+table(format(as.POSIXct(abandono$baja_fecha), "%Y %m"))
+
+
+sum(table(format(as.POSIXct(abandono$baja_fecha), "%Y %m")))
 ```
+
+En esta tabla se puede ver que los estudiantes dejan la carrera al principio, en septiembre, y muchos de julio, al final del curso anterior 2023-2024.
+
 
 Vamos a hacer un estudio rápido sobre todos los estudiantes que entrar a la escuela, antes de filtrar por aquellos que la han dejado.
 
 
-```{r}
+{r warning=FALSE}
 generar_boxplots=function(df) {
   # Filtrar solo columnas numéricas (integer o double)
   columnas_numericas <- names(df)[sapply(df, function(col) is.numeric(col))]
@@ -54,14 +71,116 @@ generar_boxplots=function(df) {
   }
 }
 
-# Ejemplo de uso con un dataframe
-dataset_ordenado <- data.frame(
-  A = c(1.5, 2.3, 3.7, 4.1, NA, 5.6),
-  B = c(10, 20, 30, 40, 50, 60),
-  C = c("Texto", "Otro", "Más", "Ejemplo", NA, "Test"),
-  D = c(100.5, 200.3, 150.8, 180.2, 90.1, 110.7)
-)
+ #generar_boxplots(inicio_etsinf)
 
-generar_boxplots(dataset_ordenado)  # Llamada a la función
+{r}
+boxplot_simple=function(df,columna){
+      print(
+      ggplot(df, aes(x = "", y = .data[[columna]])) +
+        geom_boxplot(fill = "steelblue", color = "black") +
+        labs(title = paste("Boxplot de", columna), y = columna) +
+        theme_minimal()
+    )
+}
+
+boxplot_simple(inicio_etsinf,"data_nac")
+
+```{r}
+
+generar_boxplot_multiple <- function(df, columnas,titulo) {
+  df_seleccionado <- df[, columnas, drop = FALSE]
+  df_seleccionado <- df_seleccionado[sapply(df_seleccionado, is.numeric)]
+  if (ncol(df_seleccionado) == 0) {
+    message("No hay columnas numéricas en la selección.")
+    return(NULL)  }
+  
+  df_melt <- melt(df_seleccionado, variable.name = "Variable", value.name = "Valor")
+
+  ggplot(df_melt, aes(x = Variable, y = Valor)) +
+    geom_boxplot(fill = "steelblue", color = "black") +
+    labs(title = paste0("Boxplots de ",titulo), x = "Variables", y = "Valores") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))}
+
+
+generar_boxplot_multiple(inicio_etsinf,c(77:83),"Eventos de Poliformat")
+generar_boxplot_multiple(inicio_etsinf,c(84:90),"Sesiones iniciadas en Poliformat")
+generar_boxplot_multiple(inicio_etsinf,c(91:97),"Visitas a Poliformat")
+generar_boxplot_multiple(inicio_etsinf,c(98:104),"Minutos Totales")
+generar_boxplot_multiple(inicio_etsinf,c(105:111),"Wifi")
+generar_boxplot_multiple(inicio_etsinf,c(112:118),"Recursos")
+generar_boxplot_multiple(inicio_etsinf,c(119:125),"Eventos")
+generar_boxplot_multiple(inicio_etsinf,c(126:130),"Tareas")
+generar_boxplot_multiple(inicio_etsinf,c(131:135),"Tests")
+
+```
+
+```{r}
+
+lineas_multiple=poliformat_enterolineas_multiple <- function(df, columnas, titulo) {
+  # Verificar si la columna "abandono" existe en el dataframe
+  
+  if (!"abandono" %in% names(df)) {
+    stop("La columna 'abandono' no existe en el dataframe.")
+  }
+  
+  # Seleccionar solo las columnas especificadas
+  df_seleccionado <- df[, columnas, drop = FALSE]
+  
+  # Filtrar solo columnas numéricas
+  df_seleccionado <- df_seleccionado[sapply(df_seleccionado, is.numeric)]
+  
+  # Si no hay columnas numéricas, mostrar un mensaje
+  if (ncol(df_seleccionado) == 0) {
+    message("No hay columnas numéricas en la selección.")
+    return(NULL)
+  }
+  
+  # Agregar un identificador único para cada fila
+  df_seleccionado$ID <- 1:nrow(df_seleccionado)
+  
+  # Agregar la columna "abandono" asegurando que sea factor y reemplazando NA por 0
+  df_seleccionado$abandono <- ifelse(is.na(df$abandono), 0, df$abandono)  # Reemplaza NA con 0
+  
+  # Transformar el dataframe a formato largo
+  df_melt <- melt(df_seleccionado, id.vars = c("ID", "abandono"), variable.name = "Variable", value.name = "Valor")
+  
+  # Separar los datos en dos grupos: abandono == 0 (negro) y abandono == 1 (rojo)
+  df_negro <- df_melt[df_melt$abandono == 0, ]
+  df_rojo <- df_melt[df_melt$abandono == 1, ]
+  print(dim(df_rojo))
+
+  # Crear el gráfico con capas separadas para negro y rojo
+  ggplot() +
+    # Dibujar primero las líneas negras
+    geom_line(data = df_negro, aes(x = Variable, y = Valor, group = ID), color = "black", alpha = 0.3, size = 0.5) +
+    # Dibujar después las líneas rojas (para que queden encima)
+    geom_line(data = df_rojo, aes(x = Variable, y = Valor, group = ID), color = "red", alpha = 0.8, size = 0.7) +
+    labs(title = paste0("Gráfico de Líneas: ", titulo),
+         x = "Variables (Columnas)",
+         y = "Valores") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),  # Rotar etiquetas del eje X
+          panel.grid.minor = element_blank())  # Eliminar líneas de fondo no deseadas
+}
+
+
+lineas_multiple(inicio_etsinf,c(77:83),"Eventos de Poliformat")
+lineas_multiple(inicio_etsinf,c(84:90),"Sesiones iniciadas en Poliformat")
+lineas_multiple(inicio_etsinf,c(91:97),"Visitas a Poliformat")
+lineas_multiple(inicio_etsinf,c(98:104),"Minutos Totales")
+lineas_multiple(inicio_etsinf,c(105:111),"Wifi")
+lineas_multiple(inicio_etsinf,c(112:118),"Recursos")
+lineas_multiple(inicio_etsinf,c(119:125),"Eventos")
+lineas_multiple(inicio_etsinf,c(126:130),"Tareas")
+lineas_multiple(inicio_etsinf,c(131:135),"Tests")
+
+```
+
+
+```{r}
+primero=inicio_etsinf[inicio_etsinf$asi_hash=="2bdf394d6758",]
+
+
 ```
 
