@@ -72,9 +72,11 @@ head(dataset_ordenado)
 Ahora, eliminaremos las columnas que sean completamente NA, ya que no nos sirven para el estudio inicial que haremos. En el futuro, es probable que tengamos otra versión de los datos en la cual sí sean útiles. 
 
 ```{r}
-dataset_ordenado=dataset_ordenado[, colSums(!is.na(dataset_ordenado) & dataset_ordenado != "") > 0, drop = FALSE]
+dataset_ordenado <- dataset_ordenado[, !sapply(dataset_ordenado, function(col) all(is.na(col) | (is.character(col) & col == ""))), drop = FALSE]
+
 dataset_ordenado$fecha_datos <- as.POSIXct(dataset_ordenado$fecha_datos, format="%Y-%m-%d %H:%M:%S")
 dataset_ordenado$baja_fecha=as.POSIXct(dataset_ordenado$baja_fecha, format="%Y-%m-%d")
+
 ```
 
 La cantidad de columnas con las que hay que trabajar es descomunal, por lo que vamos a dividirlas para poder reordenarlas en el dataset.
@@ -85,9 +87,10 @@ poliformat=select(dataset_ordenado,c(1:5,79:137))
 head(poliformat)
 ```
 
-Además, disponemos de datos de asignaturas del primer cuatrimestre, por lo que no tiene sentido mantener asignaturas del 2º cuatrimestre.
+
 
 ```{r}
+dataset_ordenado
 ```
 
 
@@ -141,6 +144,8 @@ dataset_ordenado$n_res_events_asg=rowSums(dataset_ordenado[,121:127])
 dataset_ordenado$asign_asg=rowSums(dataset_ordenado[,128:132])
 dataset_ordenado$test_asg=rowSums(dataset_ordenado[,132:137])
 colnames(dataset_ordenado)
+
+dataset_ordenado[41,c(114:120,142)]
 ```
 
 Ahora, vamos a sacar las mismas variables, pero referidas a cada estudiante.
@@ -152,6 +157,8 @@ dataset_ordenado=dataset_ordenado %>%
   group_by(dni_hash) %>%
   mutate(across(all_of(columnas_a_sumar), ~ sum(.x, na.rm = TRUE), .names = "{.col}_est")) %>%
   ungroup()
+
+colnames(dataset_ordenado)
 ```
 
 Finalmente, hay muchos datos que son 0 en lo que respecta a los datos de poliformat. Es decir, que esas asignaturas no han tenido ningún tipo de actividad porque son del siguiente cuatri. Esto nos dificulta estudiar la media y el seguimiento de los alumnos que dejan la carrera, pues se mezcla con las asignaturas en las que, independientemente de que haya o no dejado la carrera, no es posible que haya actividad. Al tener ya el filtro de los estudiantes que han abandono, no hay ningún problema.
@@ -201,5 +208,10 @@ write.csv(informatica, file="../Datos/Generados/Informatica/informatica_inicial.
 
 
 Teniendo ya el dataset listo y el subconjunto de informática, damos por concluido el formateado de los primeros datos. El siguiente archivo será el análisis inicial de la escuela de informática. 
+
+
+```{r}
+length(unique(dataset_ordenado$tit_hash))
+```
 
 

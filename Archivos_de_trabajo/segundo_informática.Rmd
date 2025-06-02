@@ -35,8 +35,12 @@ Filtramos por informática de Alcoy y echamos un vistazo.
 creditos_inf= creditos[creditos$tit_hash=="0fecf9247f3d",]
 demografía_inf= demografía[demografía$tit_hash=="0fecf9247f3d",]
 poliformat_inf= poliformat[poliformat$tit_hash=="0fecf9247f3d",]
+abandono_inf=abandono[abandono$tit_hash=="0fecf9247f3d",]
 
 ```
+
+
+# Ámbito digital
 
 
 ```{r}
@@ -72,7 +76,6 @@ lineas_multiple=poliformat_enterolineas_multiple <- function(df, columnas, titul
 
   df_negro <- df_melt[df_melt$abandono == 0, ]
   df_rojo  <- df_melt[df_melt$abandono == 1, ]
-  print(dim(df_rojo))
 
   ggplot() +
     geom_line(data = df_negro, aes(x = Variable, y = Valor, group = ID),
@@ -188,6 +191,171 @@ ggplot(df_long, aes(x = valor, fill = variable)) +
   geom_density(alpha = 0.5) +
   labs(title = "Densidad de nota10 y nota14 (escalada)", x = "Valor sobre 10", y = "Densidad") +
   theme_minimal()
+
+
+```
+
+Cuánta gente se ha cambiado de carrera?
+
+```{r}
+
+head(demografía)
+
+unique(dataset_ordenado[,"dni_hash"])
+
+
+```
+
+Aparentemente ninguno.
+
+```{r}
+library(corrplot)
+
+
+
+```
+
+
+```{r size=7}
+library(dplyr)
+library(fastDummies)
+library(corrplot)
+
+# Paso 1: Copia del dataframe para no tocar el original
+df <- demografía_inf[,c("nacionalitat",
+  "data_nac", "sexe", "alta_universitat", "prov_origen", "anyo_ingreso", "tipo_ingreso",
+  "nota10", "nota14", "estudios_p", "estudios_m", "dedicacion",
+  "desplazado", "discapacidad", "becado", "preferencia_seleccion","n_wifi_days_2024_7", "n_wifi_days_2024_8", "n_wifi_days_2024_9", "n_wifi_days_2024_10",
+  "n_wifi_days_2024_11", "n_wifi_days_2024_12", "n_wifi_days_2025_1","abandono")]
+
+# Paso 2: Convertir variables character a factor (si no lo son ya)
+df <- df %>%
+  mutate(across(where(is.character), as.factor))
+
+# Paso 3: Convertir las ordinales manualmente (ejemplo)
+# ⚠️ Asegurate de que los niveles estén en el orden correcto
+
+# Paso 4: Crear dummies para variables categóricas nominales
+df_dummies <- fastDummies::dummy_cols(df, remove_selected_columns = TRUE)
+
+# Paso 5: Seleccionar solo columnas numéricas para correlación
+df_numeric <- df_dummies %>% select(where(is.numeric))
+
+# Paso 6: Matriz de correlación
+cor_mat <- cor(df_numeric, use = "pairwise.complete.obs")
+
+library(corrplot)
+
+corrplot(cor_mat,
+         method = "color",          # solo color
+         type = "upper",            # parte superior
+         tl.cex = 0.7,              # tamaño etiquetas
+         tl.col = "black",          # color texto etiquetas
+         addCoef.col = NA,          # 🔥 esto quita los numeritos
+         number.cex = 0,            # adicional para evitar que salgan
+         cl.cex = 0.7,              # tamaño de la leyenda lateral
+         na.label = " ",            # sin "?" en los NA
+         col = colorRampPalette(c("blue", "white", "red"))(200))  # colores
+
+library(reshape2)
+library(ggplot2)
+
+melted_cor <- melt(cor_mat)
+
+ggplot(melted_cor, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_text(size = 6),
+        panel.grid = element_blank()) +
+  labs(title = "Heatmap de correlación",
+       x = "", y = "", fill = "Correlación")
+
+```
+
+```{r}
+# Paquetes necesarios
+library(dplyr)
+library(ggplot2)
+library(rcompanion)
+
+# Variables que querés usar
+vars_usar <- c(
+  "nacionalitat", "data_nac", "sexe", "alta_universitat", "prov_origen", 
+  "anyo_ingreso", "tipo_ingreso", "nota10", "nota14", "estudios_p", 
+  "estudios_m", "dedicacion", "desplazado", "discapacidad", "becado", 
+  "preferencia_seleccion", "n_wifi_days_2024_7", "n_wifi_days_2024_8", 
+  "n_wifi_days_2024_9", "n_wifi_days_2024_10", "n_wifi_days_2024_11", 
+  "n_wifi_days_2024_12", "n_wifi_days_2025_1"
+)
+
+# Asegurarse de que abandono es numérica binaria (0/1)
+demografía_inf$abandono <- as.numeric(as.factor(demografía_inf$abandono)) - 1
+
+# Filtrar solo variables seleccionadas + abandono
+df_sel <- demografía_inf[, c("abandono", vars_usar)]
+
+# 🔁 TRANSFORMACIONES MANUALES
+
+# 1. sexe: "V" → 1, "M" → 0
+df_sel$sexe <- ifelse(df_sel$sexe == "V", 1,
+                      ifelse(df_sel$sexe == "M", 0, NA))
+
+# 2. nacionalitat: "E" → 1, "XXX" → 0
+df_sel$nacionalitat <- ifelse(df_sel$nacionalitat == "E", 1,
+                              ifelse(df_sel$nacionalitat == "XXX", 0, NA))
+
+# Separar numéricas y categóricas (post-transformación)
+num_vars <- vars_usar[sapply(df_sel[, vars_usar], is.numeric)]
+cat_vars <- vars_usar[sapply(df_sel[, vars_usar], function(x) is.factor(x) || is.character(x))]
+
+# Añadir sexe y nacionalitat a las numéricas manualmente (ya las convertimos)
+num_vars <- union(num_vars, c("sexe", "nacionalitat"))
+cat_vars <- setdiff(cat_vars, c("sexe", "nacionalitat"))
+
+# Inicializar resultados
+resultados <- data.frame(variable = character(),
+                         correlacion = numeric(),
+                         tipo = character(),
+                         stringsAsFactors = FALSE)
+
+# 📈 Correlaciones numéricas (Pearson)
+for (var in num_vars) {
+  valor <- suppressWarnings(cor(df_sel$abandono, df_sel[[var]], use = "complete.obs"))
+  resultados <- rbind(resultados, data.frame(variable = var, correlacion = valor, tipo = "Numérica"))
+}
+
+# 📊 Categóricas (Cramér’s V)
+for (var in cat_vars) {
+  x <- as.factor(df_sel$abandono)
+  y <- as.factor(df_sel[[var]])
+  
+  # Solo usar pares completos
+  df_temp <- data.frame(x = x, y = y)
+  df_temp <- df_temp[complete.cases(df_temp), ]
+  
+  v <- tryCatch({
+    if (nlevels(df_temp$x) >= 2 && nlevels(df_temp$y) >= 2) {
+      cramerV(df_temp$x, df_temp$y, bias.correct = TRUE)
+    } else {
+      NA
+    }
+  }, error = function(e) NA)
+  
+  resultados <- rbind(resultados, data.frame(variable = var, correlacion = v, tipo = "Categórica"))
+}
+
+# 🎨 Gráfico
+ggplot(resultados, aes(x = reorder(variable, correlacion), y = correlacion, fill = tipo)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_manual(values = c("Numérica" = "steelblue", "Categórica" = "orange")) +
+  theme_minimal() +
+  labs(title = "Correlación de variables con 'abandono'",
+       x = "Variable",
+       y = "Correlación (Pearson o Cramér's V)",
+       fill = "Tipo de variable")
 
 
 ```

@@ -1,0 +1,928 @@
+---
+title: "1. Análisis Exploratorio"
+author: "Pablo Parrilla Cañadas"
+date: "2025-04-29"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+library(skimr)
+library(RColorBrewer)
+library(scales)
+library(corrplot)
+library(reshape2)
+library(lsr)
+library(vcd)
+library(rcompanion)
+library(caret)
+library(factoextra)
+library(lubridate)
+library(tidyr)
+library(forcats)
+library(FactoMineR)
+
+load("../../Datos/Capítulos/Preprocesado.RData")
+```
+
+
+# Datos sociodemográficos
+
+```{r}
+a=skim(sociodemografia)
+a=as.data.frame(a)
+```
+
+```{r}
+df_long <- sociodemografia %>%
+  pivot_longer(cols = c(nota10, nota14), names_to = "variable", values_to = "valor")
+
+a=ggplot(df_long, aes(x = valor, fill = variable)) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Densidad de nota10 y nota14", x = "Valor", y = "Densidad") +
+  theme_minimal()
+
+```
+
+
+```{r fig.width=10,fig.height=5}
+
+# Convierte el data frame a formato largo (long)
+df_long <- sociodemografia %>%
+  pivot_longer(cols = c(anyo_ingreso, alta_universitat,data_nac), names_to = "variable", values_to = "valor")
+
+b=ggplot(df_long, aes(x = variable,y=valor, fill = variable)) +
+  geom_boxplot(alpha = 0.5) +
+  labs(title = "Boxplot de anyo_ingreso, alta_universitat y \ndata_nac", x = "Valor", y = "Densidad") +
+  theme_minimal()
+
+grid.arrange(a, b, ncol = 2)
+
+```
+
+
+```{r}
+sociodemografia[sapply(sociodemografia, is.factor)] <-
+  lapply(sociodemografia[sapply(sociodemografia, is.factor)], function(x) {
+    x <- addNA(x)
+    levels(x)[is.na(levels(x))] <- "Desconocido"  
+    x[is.na(x)] <- "Desconocido"
+    return(x)
+  })
+```
+
+
+```{r fig.width=10}
+multi_vars <- c("tipo_ingreso", "preferencia_seleccion","becado", "estudios_p", "estudios_m")
+
+# Crear lista de plots individuales ordenados por frecuencia
+plots_multi <- lapply(multi_vars, function(var) {
+  ggplot(sociodemografia, aes(x = fct_infreq(.data[[var]]), fill = .data[[var]])) +
+    geom_bar() +
+    scale_fill_discrete() +
+    labs(title = var, x = NULL, y = "Frecuencia") +
+    theme_minimal() +
+    theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+})
+
+# Mostrar en grid de 2x2
+grid.arrange(grobs = plots_multi, ncol = 3)
+
+```
+
+```{r}
+table(sociodemografia$estudios_m)
+cat("")
+table(sociodemografia$estudios_p)
+```
+
+
+```{r fig.height=8, fig.width=10}
+
+# Grupos de variables
+binarias_1 <- c("nacionalitat", "sexe")
+binarias_3 <- c("prov_origen", "desplazado")
+binarias_2 <- c("discapacidad","dedicacion" )
+
+# Función que crea un gráfico para un grupo de variables
+crear_plot_binarias <- function(vars) {
+  df <- sociodemografia %>%
+    select(all_of(vars)) %>%
+    pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor") %>%
+    filter(!is.na(Valor)) %>%
+    group_by(Variable, Valor) %>%
+    summarise(n = n(), .groups = "drop") %>%
+    group_by(Variable) %>%
+    mutate(Proporcion = n / sum(n),
+           Etiqueta = paste0(Valor, ": ", round(Proporcion * 100), "%"))
+  
+  ggplot(df, aes(x = Variable, y = Proporcion, fill = Valor)) +
+    geom_col(position = position_dodge(width = 0.9)) +
+    geom_text(aes(label = Etiqueta), position = position_dodge(width = 0.9),
+              vjust = -0.3, size = 3) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                       breaks = seq(0, 1, 0.1), limits = c(0, 1.05)) +
+    labs(title = paste("Variables:", paste(vars, collapse = ", ")),
+         y = "Proporción", x = NULL) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+# Crear los gráficos
+plot1 <- crear_plot_binarias(binarias_1)
+plot2 <- crear_plot_binarias(binarias_2)
+plot3 <- crear_plot_binarias(binarias_3)
+
+# Mostrar todos en un grid
+grid.arrange(plot1, plot2, plot3, nrow = 3)
+
+```
+
+```{r}
+
+```
+
+# Datos académicos
+
+
+```{r}
+summary(academicas)
+```
+
+
+```{r}
+a=skim(academicas)
+write.csv(a[c(7:43),c(1:4,13:19)],"skim_academicas.csv")
+
+```
+
+
+Mirar año inicio de estudios
+
+```{r}
+
+# Lista de variables a representar
+vars_academicas <- c(
+  "cred_mat1", "cred_mat2", "cred_mat3", "cred_mat4", "cred_sup_normal", "cred_sup_espec", "cred_sup",
+  "cred_mat_normal", "cred_mat_movilidad", "cred_ptes_acta", "cred_mat_practicas", "cred_mat_sem_a",
+  "cred_mat_sem_b", "cred_mat_anu", "cred_mat_total", "cred_sup_sem_a", "cred_sup_sem_b", 
+  "cred_sup_total", "cred_sup_1o", "cred_sup_2o", "cred_sup_3o", "cred_sup_4o", "practicas", "actividades",
+  "ajuste", "cred_sup_tit", "cred_pend_sup_tit", "asig1", "pract1", "activ1", "total1"
+)
+
+# Transformar a formato largo para ggplot
+df_long <- academicas %>%
+  select(all_of(vars_academicas)) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
+
+# Graficar
+ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, na.rm = TRUE))) +
+  geom_boxplot(fill = "skyblue", outlier.size = 0.7) +
+  labs(title = "Distribución de variables académicas", x = "Valor", y = "Variable") +
+  theme_minimal(base_size = 12)
+
+```
+
+No se ve mucho así que las dividimos
+
+```{r}
+grupo_creditos_altos <- c("cred_pend_sup_tit", "cred_sup_tit", "cred_mat_normal", "cred_mat_total")
+
+grupo_creditos_moderados <- c( "cred_ptes_acta", "cred_sup_1o", "cred_sup_2o", "cred_sup_3o","cred_sup_4o")
+
+grupo_creditos_individuales <- c("cred_mat1", "cred_mat2", "cred_mat3", "cred_mat4", "cred_mat_sem_a",  "cred_mat_sem_b", "cred_mat_anu")
+
+grupo_creditos_especiales <- c("cred_sup", "cred_sup_espec", "cred_sup_normal", "cred_sup_sem_a", "cred_sup_sem_b", "cred_sup_total", "cred_mat_movilidad", "cred_mat_practicas")
+
+grupo_otros_academicos <- c("practicas", "pract1", "asig1", "activ1", "actividades", "ajuste", "total1")
+
+rendimientos <- c("rendimiento_cuat_a", "rendimiento_total", "rend_total_ultimo", "rend_total_penultimo","rend_total_antepenultimo")
+
+
+
+# Transformar a formato largo para ggplot
+df_long <- academicas %>%
+  select(all_of(grupo_creditos_altos)) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
+
+conteos <- df_long %>%
+  filter(!is.na(Valor)) %>%
+  group_by(Variable) %>%
+  summarise(n = n())
+
+# Crear gráfico con etiquetas de conteo
+ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, na.rm = TRUE))) +
+  geom_boxplot(fill = "skyblue", outlier.size = 0.7) +
+  geom_text(data = conteos, aes(x = Inf, y = fct_reorder(Variable, -n), label = paste0("n = ", n)),
+            hjust = 2,  size = 3.5, inherit.aes = FALSE,vjust = 1.5) +
+  labs(title = "Distribución de créditos totales", x = "Valor", y = "Variable") +
+  theme_minimal(base_size = 12)
+
+academicas=select(academicas, -cred_pend_sup_tit)
+```
+
+```{r}
+
+# Transformar a formato largo para ggplot
+df_long <- academicas %>%
+  select(all_of(grupo_creditos_moderados)) 
+  
+df_long[df_long==0]=NA
+
+df_long=df_long%>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
+
+conteos <- df_long %>%
+  filter(!is.na(Valor)) %>%
+  group_by(Variable) %>%
+  summarise(n = n())
+
+# Crear gráfico con etiquetas de conteo
+ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, na.rm = TRUE))) +
+  geom_boxplot(fill = "skyblue", outlier.size = 0.7) +
+  geom_text(data = conteos, aes(x = Inf, y = fct_reorder(Variable, -n), label = paste0("n = ", n)),
+            hjust = 3,  size = 3.5, inherit.aes = FALSE,vjust = 1.5) +
+  labs(title = "Créditos superados y pedientes", x = "Valor", y = "Variable") +
+  theme_minimal(base_size = 12)
+
+```
+
+
+```{r}
+# Transformar a formato largo para ggplot
+df_long <- academicas %>%
+  select(all_of(grupo_creditos_individuales)) 
+
+df_long[df_long==0]=NA
+
+df_long=df_long%>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
+
+conteos <- df_long %>%
+  filter(!is.na(Valor)) %>%
+  group_by(Variable) %>%
+  summarise(n = n())
+
+# Crear gráfico con etiquetas de conteo
+ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, na.rm = TRUE))) +
+  geom_boxplot(fill = "skyblue", outlier.size = 0.7) +
+  geom_text(data = conteos, aes(x = Inf, y = fct_reorder(Variable, -n), label = paste0("n = ", n)),
+            hjust = 3,  size = 3.5, inherit.aes = FALSE,vjust = 1.5) +
+  labs(title = "Créditos matriculados por año y semestre", x = "Valor", y = "Variable") +
+  theme_minimal(base_size = 12)
+
+```
+
+
+```{r}
+# Transformar a formato largo para ggplot
+df_long <- academicas %>%
+  select(all_of(grupo_creditos_especiales)) 
+
+  
+df_long[df_long==0]=NA
+
+df_long=df_long%>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
+
+conteos <- df_long %>%
+  filter(!is.na(Valor)) %>%
+  group_by(Variable) %>%
+  summarise(n = n())
+
+# Crear gráfico con etiquetas de conteo
+ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, na.rm = TRUE))) +
+  geom_boxplot(fill = "skyblue", outlier.size = 0.7) +
+  geom_text(data = conteos, aes(x = Inf, y = fct_reorder(Variable, -n), label = paste0("n = ", n)),
+            hjust = 4,  size = 3.5, inherit.aes = FALSE,vjust = 1.5) +
+  labs(title = "Créditos superados y matriculados", x = "Valor", y = "Variable") +
+  theme_minimal(base_size = 12)
+```
+
+```{r}
+
+# Transformar a formato largo para ggplot
+df_long <- academicas %>%
+  select(all_of(grupo_otros_academicos)) 
+
+  
+df_long[df_long==0]=NA
+
+df_long=df_long%>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
+
+conteos <- df_long %>%
+  filter(!is.na(Valor)) %>%
+  group_by(Variable) %>%
+  summarise(n = n())
+
+# Crear gráfico con etiquetas de conteo
+ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, na.rm = TRUE))) +
+  geom_boxplot(fill = "skyblue", outlier.size = 0.7) +
+  geom_text(data = conteos, aes(x = Inf, y = fct_reorder(Variable, -n), label = paste0("n = ", n)),
+            hjust = 5,  size = 3.5, inherit.aes = FALSE,vjust = 1.5) +
+  labs(title = "Otras variables académicas: actividades, ajuste y prácticas", x = "Valor", y = "Variable") +
+  theme_minimal(base_size = 12)
+
+```
+
+```{r}
+
+
+# Transformar a formato largo para ggplot
+df_long <- academicas %>%
+  select(all_of(rendimientos))
+
+df_long[df_long==0]=NA
+
+df_long=df_long%>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
+
+conteos <- df_long %>%
+  filter(!is.na(Valor)) %>%
+  group_by(Variable) %>%
+  summarise(n = n())
+
+# Crear gráfico con etiquetas de conteo
+ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, na.rm = TRUE))) +
+  geom_boxplot(fill = "skyblue", outlier.size = 0.7) +
+  geom_text(data = conteos, aes(x = Inf, y = fct_reorder(Variable, -n), label = paste0("n = ", n)),
+            hjust = 6,  size = 3.5, inherit.aes = FALSE,vjust = 1.5) +
+  labs(title = "Evolución del rendimiento académico", x = "Valor", y = "Variable") +
+  theme_minimal(base_size = 12)
+
+```
+
+
+
+```{r}
+
+# Grupos de variables
+binarias_1 <- c("exento_npp", "es_adaptado","es_retitulado")
+
+crear_plot_binarias <- function(vars) {
+  df <- academicas %>%
+    select(all_of(vars)) %>%
+    pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor") %>%
+    filter(!is.na(Valor)) %>%
+    group_by(Variable, Valor) %>%
+    summarise(n = n(), .groups = "drop") %>%
+    group_by(Variable) %>%
+    mutate(Proporcion = n / sum(n),
+           Etiqueta = paste0(Valor, ": ", round(Proporcion * 100), "%"))
+  
+  ggplot(df, aes(x = Variable, y = Proporcion, fill = as.factor(Valor))) +
+    geom_col(position = "stack", width = 0.7) +
+    geom_text(aes(label = Etiqueta), position = position_stack(vjust = 0.5), 
+              color = "black", size = 5) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                       breaks = seq(0, 1, 0.1), limits = c(0, 1)) +
+    scale_fill_manual(values = c("0" = "#2a9d8f", "1" = "#e76f51")) +  # Ejemplo de colores
+    labs(title = "Distribución de exenciones y adaptaciones académicas",
+         y = "Proporción", x = NULL) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+
+# Crear los gráficos
+crear_plot_binarias(binarias_1)
+
+
+
+```
+
+```{r fig.width=8}
+df_barras <- academicas %>%
+  select(curso_mas_alto, curso_mas_bajo) %>%
+  pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor") %>%
+  filter(!is.na(Valor)) %>%
+  group_by(Variable, Valor) %>%
+  summarise(Recuento = n(), .groups = "drop")
+
+# Convertir a factor ordenado para controlar el orden de las barras
+df_barras$Valor <- factor(df_barras$Valor, levels = 1:4)
+
+# Gráfico
+ggplot(df_barras, aes(x = Valor, y = Recuento, fill = Variable)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(title = "Comparación de curso más bajo y más alto",
+       x = "Curso", y = "Recuento") +
+  scale_fill_manual(values = c("#00BFC4", "#F8766D"), labels = c("Curso más alto", "Curso más bajo")) +
+  theme_minimal()
+```
+
+# Digital
+
+```{r}
+summary(poliformat)
+colnames(poliformat)
+```
+
+
+```{r}
+#b=skim(poliformat)
+#write.csv(b[,c(1:4,10:16)],"skim_poliformat.csv")
+```
+
+
+
+```{r fig.width=10}
+lineas_multiple <- function(df, columnas, titulo) {
+  if (is.numeric(columnas)) {
+    columnas <- names(df)[columnas]
+  }
+
+  df_seleccionado <- df[, columnas, drop = FALSE]
+  df_seleccionado <- df_seleccionado[sapply(df_seleccionado, is.numeric)]
+  df_seleccionado=unique(df_seleccionado)
+
+  if (ncol(df_seleccionado) == 0) {
+    message("No hay columnas numéricas en la selección.")
+    return(NULL)
+  }
+
+  df_valores <- df_seleccionado
+  df_valores$ID <- 1:nrow(df_valores)
+
+  df_melt <- reshape2::melt(df_valores, id.vars = "ID",
+                            variable.name = "Variable", value.name = "Valor")
+  df_melt$Variable <- factor(df_melt$Variable, levels = columnas)
+  df_melt <- unique(df_melt)
+
+  ggplot(df_melt, aes(x = Variable, y = Valor, group = ID)) +
+    geom_line(color = "black", alpha = 0.3, size = 0.5) +
+    labs(title = titulo, x = "Variables", y = "Valores") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          panel.grid.minor = element_blank())
+}
+
+g1 <- lineas_multiple(poliformat, c(2:8), "Eventos de Poliformat")
+g2 <- lineas_multiple(poliformat, c(9:15), "Días con Sesiones iniciadas")
+g3 <- lineas_multiple(poliformat, c(16:22), "Visitas a asignaturas")
+g4 <- lineas_multiple(poliformat, c(23:29), "Minutos Totales")
+g5 <- lineas_multiple(poliformat, c(38:43), "Días accedidos a Recursos \nde una asignatura")
+g6 <- lineas_multiple(poliformat, c(44:50), "Acciones en recursos \n de una asignatura")
+g7 <- lineas_multiple(poliformat, c(51:55), "Tareas entregadas en \nuna asignatura")
+g8 <- lineas_multiple(poliformat, c(56:60), "Tests entregados en \nuna asignatura")
+
+grid_1 <- grid.arrange(g1, g2, ncol = 2)
+grid_2 <- grid.arrange(g3, g4, ncol = 2)
+grid_3 <- grid.arrange(g5, g6, ncol = 2)
+grid_4 <- grid.arrange(g7, g8, ncol = 2)
+
+
+
+```
+
+
+
+
+
+
+```{r}
+
+variables_asg <- function(df, variable, titulo) {
+  # Validar existencia y tipo
+  if (!variable %in% names(df)) {
+    stop(paste("La variable", variable, "no existe en el dataframe."))
+  }
+  if (!is.numeric(df[[variable]])) {
+    stop("La variable debe ser numérica.")
+  }
+
+  # Quitar valores cero o negativos para el log
+  df_filtrado <- df[df[[variable]] > 0, ]
+
+  # Gráfico 1: Boxplot con escala lineal
+  ggplot(df, aes(x = .data[[variable]], y = "")) +
+    geom_boxplot(fill = "#2a9d8f", alpha = 0.5) +
+    labs(title = paste0(titulo), x = variable, y = "") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+}
+
+variables_asg(poliformat, "evento_poliformat_asg_media", "Eventos en una asignatura")
+variables_asg(poliformat, "loggins_asg_media", "Días con accesos a una asignatura")
+variables_asg(poliformat, "visitas_asg_media", "Visitas a una asignatura")
+variables_asg(poliformat, "minutos_asg_media", "Minutos dedicados a una asignatura")
+variables_asg(poliformat, "n_res_day_asg_media", "Días accedidos a recursos de una asignatura")
+variables_asg(poliformat, "n_res_events_asg_media", "Total de acciones en Recursos de una asignatura")
+variables_asg(poliformat, "asign_asg_media", "Tareas entregadas en una asignatura")
+variables_asg(poliformat, "test_asg_media", "Tests entregados en una asignatura")
+
+```
+
+
+```{r}
+colnames(poliformat)
+lineas_multiple(poliformat, c(30:36), "Conexiones al WiFi x estudiante")
+```
+
+# Abandono como tal
+
+```{r}
+summary(abandono)
+```
+
+```{r}
+skim(abandono)
+```
+
+```{r}
+table(academicas$abandono)
+```
+
+# Correlación todas
+
+
+```{r}
+completo <- sociodemografia %>%
+  left_join(select(academicas,-c("abandono")), by = "dni_hash") %>%
+  left_join((select(poliformat,-c("abandono"))), by = "dni_hash") 
+
+```
+
+
+```{r}
+calcular_correlaciones <- function(df, bloque = "Dataset") {
+  num_vars <- names(df)[sapply(df, is.numeric)]
+  cat_vars <- names(df)[sapply(df, function(x) is.factor(x) || is.character(x))]
+
+  resultados <- data.frame(var1 = character(), var2 = character(), tipo = character(), correlacion = numeric(), stringsAsFactors = FALSE)
+
+  # Numéricas ↔ Numéricas (Pearson)
+  for (i in seq_along(num_vars)) {
+    for (j in seq_along(num_vars)) {
+      if (i < j) {
+        print(paste0("Numéricas",i))
+        r <- cor(df[[num_vars[i]]], df[[num_vars[j]]], use = "pairwise.complete.obs")
+        resultados <- rbind(resultados, data.frame(
+          var1 = num_vars[i], var2 = num_vars[j],
+          tipo = "Pearson", correlacion = r
+        ))
+      }
+    }
+  }
+
+  # Categóricas ↔ Categóricas (Cramér's V)
+  for (i in seq_along(cat_vars)) {
+    for (j in seq_along(cat_vars)) {
+      if (i < j) {
+        print(paste0("Categóricas",i))
+        tabla <- table(df[[cat_vars[i]]], df[[cat_vars[j]]])
+        if (min(dim(tabla)) > 1) {
+          cramers <- suppressWarnings(assocstats(tabla)$cramer)
+          resultados <- rbind(resultados, data.frame(
+            var1 = cat_vars[i], var2 = cat_vars[j],
+            tipo = "Cramér's V", correlacion = cramers
+          ))
+        }
+      }
+    }
+  }
+
+  # Categóricas ↔ Numéricas (eta² = proporción de varianza explicada)
+  for (cat in cat_vars) {
+    for (num in num_vars) {
+      print(paste0("Cate_nume",cat))
+      f <- try(summary(aov(df[[num]] ~ as.factor(df[[cat]]))), silent = TRUE)
+      if (!inherits(f, "try-error")) {
+        ss_total <- sum(f[[1]][["Sum Sq"]])
+        ss_model <- f[[1]][["Sum Sq"]][1]
+        eta2 <- ss_model / ss_total
+        resultados <- rbind(resultados, data.frame(
+          var1 = cat, var2 = num,
+          tipo = "Eta²", correlacion = eta2
+        ))
+      }
+    }
+  }
+
+  resultados <- resultados %>%
+    mutate(bloque = bloque) %>%
+    arrange(desc(abs(correlacion)))
+  
+  return(resultados)
+}
+
+cor_aca = calcular_correlaciones(academicas[2:43], "Academicas")
+cor_socio = calcular_correlaciones(sociodemografia[2:17], "Sociodemografía")
+
+socio_aca=sociodemografia %>%
+  left_join(select(academicas,-c("abandono")), by = "dni_hash")
+
+cor_socio_aca =calcular_correlaciones(socio_aca, "Completo")
+
+fuera <- c("dni_hash", "asinom", "baja_fecha")
+```
+
+```{r}
+
+cor_socio_filt=cor_socio %>% filter(abs(correlacion) > 0.3)
+cor_aca_filt=cor_aca %>% filter(abs(correlacion) > 0.3)
+cor_socio_aca_filt=cor_socio_aca %>% filter(abs(correlacion) > 0.3)
+
+cor_aca_filt <- cor_aca_filt[!apply(cor_aca_filt, 1, function(fila) any(fila %in% fuera)), ]
+cor_socio_filt <- cor_socio_filt[!apply(cor_socio_filt, 1, function(fila) any(fila %in% fuera)), ]
+cor_socio_aca_filt <- cor_socio_aca_filt[!apply(cor_socio_aca_filt, 1, function(fila) any(fila %in% fuera)), ]
+```
+
+```{r}
+melt_academicas <- cor_aca_filt %>%
+  rename(Numérica = var1, Categórica = var2) 
+
+
+melt_socio_filt <- cor_socio_filt %>%
+  rename(Numérica = var1, Categórica = var2) 
+
+melt_socio_aca_filt <- cor_socio_aca_filt %>%
+  rename(Numérica = var1, Categórica = var2) 
+```
+
+
+```{r}
+ggplot(melt_academicas, aes(x = Categórica, y = Numérica, fill = correlacion)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "white", high = "red", na.value = "grey90", limits = c(0,1)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size=7), axis.text.y =element_text(size=7)) +
+  labs(title = "Correlación variables académicas")
+
+ggplot(melt_socio_filt, aes(x = Categórica, y = Numérica, fill = correlacion)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "white", high = "red", na.value = "grey90", limits = c(0,1)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size=7), axis.text.y =element_text(size=7)) +
+  labs(title = "Correlación variables sociodemográficas")
+
+ggplot(melt_socio_aca_filt, aes(x = Categórica, y = Numérica, fill = correlacion)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "white", high = "red", na.value = "grey90", limits = c(0,1)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,size=7), axis.text.y =element_text(size=7)) +
+  labs(title = "Correlación variables académicas y sociodemográficas")
+```
+
+
+
+```{r fig.width=12}
+library(fastDummies)
+
+# 1. Selección de variables numéricas y categóricas
+num_vars <- sociodemografia %>% select(where(is.numeric))
+cat_vars <- sociodemografia %>% select(where(is.factor) | where(is.character)) %>% 
+  select(-dni_hash)  # Eliminar identificadores
+
+# 2. One-hot encoding para categóricas
+cat_dummies <- dummy_cols(cat_vars, remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+
+# 3. Combinar numéricas + dummies
+datos_pca <- bind_cols(num_vars, cat_dummies)
+
+# 4. Eliminar columnas constantes (varianza 0)
+datos_pca <- datos_pca[, sapply(datos_pca, function(x) var(x, na.rm = TRUE) > 0)]
+
+# 5. Imputar NA con mediana
+preprocess <- preProcess(datos_pca, method = "medianImpute")
+datos_imputados <- predict(preprocess, newdata = datos_pca)
+
+# 6. PCA
+pca_resultado <- prcomp(datos_imputados, scale. = TRUE)
+
+# 7. Ver resumen y contribuciones
+summary(pca_resultado)
+fviz_eig(pca_resultado, addlabels = TRUE, main = "PCA socio")
+fviz_pca_var(pca_resultado,
+             col.var = "contrib",           # Colorear por contribución
+             gradient.cols = c("red", "yellow", "green"),  # Paleta de colores
+             repel = TRUE) +                # Evita solapamiento de etiquetas
+  labs(title = "Contribución de sociodemográficas: 1º y 2º dimensión") +
+  theme_minimal()
+fviz_pca_var(pca_resultado,
+             axes=c(3,4),
+             col.var = "contrib",           # Colorear por contribución
+             gradient.cols = c("red", "yellow", "green"),  # Paleta de colores
+             repel = TRUE) +                # Evita solapamiento de etiquetas
+  labs(title = "Contribución de sociodemográficas: 3º y 4º dimensión") +
+  theme_minimal()
+
+
+```
+
+
+
+
+```{r fig.width=10}
+# 1. Selección de variables numéricas y categóricas
+num_vars <- academicas %>% select(where(is.numeric))
+cat_vars <- academicas %>% select(where(is.factor) | where(is.character)) %>% 
+  select(-dni_hash)  # Eliminar identificadores
+
+# 2. One-hot encoding para categóricas
+cat_dummies <- dummy_cols(cat_vars, remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+
+# 3. Combinar numéricas + dummies
+datos_pca <- bind_cols(num_vars, cat_dummies)
+
+# 4. Eliminar columnas constantes (varianza 0)
+datos_pca <- datos_pca[, sapply(datos_pca, function(x) var(x, na.rm = TRUE) > 0)]
+
+# 5. Imputar NA con mediana
+preprocess <- preProcess(datos_pca, method = "medianImpute")
+datos_imputados <- predict(preprocess, newdata = datos_pca)
+
+# 6. PCA
+pca_resultado <- prcomp(datos_imputados, scale. = TRUE)
+
+# 7. Ver resumen y contribuciones
+summary(pca_resultado)
+fviz_eig(pca_resultado, addlabels = TRUE, main="PCA aca")
+fviz_pca_var(pca_resultado,
+             col.var = "contrib",           # Colorear por contribución
+             gradient.cols = c("red", "yellow", "green"),  # Paleta de colores
+             repel = TRUE) +                # Evita solapamiento de etiquetas
+  labs(title = "Contribución de academicas: 1º y 2º dimensión") +
+  theme_minimal()
+fviz_pca_var(pca_resultado,
+             axes=c(3,4),
+             col.var = "contrib",           # Colorear por contribución
+             gradient.cols = c("red", "yellow", "green"),  # Paleta de colores
+             repel = TRUE) +                # Evita solapamiento de etiquetas
+  labs(title = "Contribución de academicas: 3º y 4º dimensión") +
+  theme_minimal()
+
+
+```
+
+```{r fig.width=10}
+# 1. Selección de variables numéricas y categóricas
+num_vars <- poliformat %>% select(where(is.numeric))
+
+num_vars= num_vars[,2:length(num_vars)]
+# 2. One-hot encoding para categóricas
+
+# 3. Combinar numéricas + dummies
+datos_pca <- num_vars
+# 5. Imputar NA con mediana
+preprocess <- preProcess(datos_pca, method = "medianImpute")
+datos_imputados <- predict(preprocess, newdata = datos_pca)
+
+# 6. PCA
+pca_resultado <- prcomp(datos_imputados, scale. = TRUE)
+
+# 7. Ver resumen y contribuciones
+summary(pca_resultado)
+fviz_eig(pca_resultado, addlabels = TRUE, main="PCA Poliformat")
+contrib <- factoextra::get_pca_var(pca_resultado)$contrib
+
+# 2. Filtrar variables con más del 10% en al menos una de las dos primeras dimensiones
+
+
+var_filtradas <- rownames(contrib)[apply(contrib[, 1:2], 1, function(x) any(x > 2))]
+var_filtradas2 <- rownames(contrib)[apply(contrib[, 3:4], 1, function(x) any(x > 2))]
+
+# 3. Visualizar solo esas variables
+fviz_pca_var(pca_resultado,
+             select.var = list(name = var_filtradas),
+             col.var = "contrib",
+             gradient.cols = c("red", "yellow", "green"),
+             repel = TRUE) +
+  labs(title = "Variables con >10% de contribución (Dim 1 o 2)") +
+  theme_minimal()
+fviz_pca_var(pca_resultado,
+             axes=c(3,4),
+             select.var = list(name=var_filtradas2),
+             col.var = "contrib",           # Colorear por contribución
+             gradient.cols = c("red", "yellow", "green"),  # Paleta de colores
+             repel = TRUE) +                # Evita solapamiento de etiquetas
+  labs(title = "Contribución de Poliformat: 3º y 4º dimensión") +
+  theme_minimal()
+
+
+```
+
+Academicas + sociodemografía
+
+```{r}
+ambas= academicas %>% 
+  left_join(select(sociodemografia,-abandono),by="dni_hash") 
+
+ambas
+```
+
+
+
+
+```{r fig.width=10}
+# 1. Selección de variables numéricas y categóricas
+num_vars <- ambas %>% select(where(is.numeric))
+cat_vars <- ambas %>% select(where(is.factor) | where(is.character)) %>% 
+  select(-dni_hash)  # Eliminar identificadores
+
+# 2. One-hot encoding para categóricas
+cat_dummies <- dummy_cols(cat_vars, remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+
+# 3. Combinar numéricas + dummies
+datos_pca <- bind_cols(num_vars, cat_dummies)
+
+# 4. Eliminar columnas constantes (varianza 0)
+datos_pca <- datos_pca[, sapply(datos_pca, function(x) var(x, na.rm = TRUE) > 0)]
+
+# 5. Imputar NA con mediana
+preprocess <- preProcess(datos_pca, method = "medianImpute")
+datos_imputados <- predict(preprocess, newdata = datos_pca)
+
+# 6. PCA
+pca_resultado <- prcomp(datos_imputados, scale. = TRUE)
+
+contrib <- factoextra::get_pca_var(pca_resultado)$contrib
+var_filtradas <- rownames(contrib)[apply(contrib[, 1:2], 1, function(x) any(x > 2))]
+var_filtradas2 <- rownames(contrib)[apply(contrib[, 3:4], 1, function(x) any(x > 2))]
+
+
+# 7. Ver resumen y contribuciones
+summary(pca_resultado)
+fviz_eig(pca_resultado, addlabels = TRUE,main="PCA Ambas")
+fviz_pca_var(pca_resultado,
+             select.var = list(name = var_filtradas),
+             col.var = "contrib",
+             gradient.cols = c("red", "yellow", "green"),
+             repel = TRUE) +
+  labs(title = "Contribución de variables académicas y sociodemográficas: 1º y 2º dimensión") +
+  theme_minimal()
+fviz_pca_var(pca_resultado,
+             axes=c(3,4),
+             select.var = list(name=var_filtradas2),
+             col.var = "contrib",           # Colorear por contribución
+             gradient.cols = c("red", "yellow", "green"),  # Paleta de colores
+             repel = TRUE) +                # Evita solapamiento de etiquetas
+  labs(title = "Contribución de variables académicas y sociodemográficas: 3º y 4º dimensión") +
+  theme_minimal()
+
+```
+
+```{r}
+
+completo=sociodemografia %>%
+  left_join(select(academicas,-c("abandono")), by = "dni_hash") %>% 
+  left_join(select(poliformat,-c("abandono")), by="dni_hash")
+
+
+
+num_vars <- completo %>% select(where(is.numeric))
+cat_vars <- completo %>% select(where(is.factor) | where(is.character)) %>% 
+  select(-dni_hash)  # Eliminar identificadores
+
+# 2. One-hot encoding para categóricas
+cat_dummies <- dummy_cols(cat_vars, remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+
+# 3. Combinar numéricas + dummies
+datos_pca <- bind_cols(num_vars, cat_dummies)
+
+# 4. Eliminar columnas constantes (varianza 0)
+datos_pca <- datos_pca[, sapply(datos_pca, function(x) var(x, na.rm = TRUE) > 0)]
+
+# 5. Imputar NA con mediana
+preprocess <- preProcess(datos_pca, method = "medianImpute")
+datos_imputados <- predict(preprocess, newdata = datos_pca)
+
+# 6. PCA
+pca_resultado <- prcomp(datos_imputados, scale. = TRUE)
+contrib <- factoextra::get_pca_var(pca_resultado)$contrib
+var_filtradas <- rownames(contrib)[apply(contrib[, 1:2], 1, function(x) any(x > 2))]
+var_filtradas2 <- rownames(contrib)[apply(contrib[, 3:4], 1, function(x) any(x > 2))]
+
+
+
+# 7. Ver resumen y contribuciones
+summary(pca_resultado)
+fviz_eig(pca_resultado, addlabels = TRUE, main="PCA Completo")
+fviz_pca_var(pca_resultado,
+             select.var = list(name = var_filtradas),
+             col.var = "contrib",
+             gradient.cols = c("red", "yellow", "green"),
+             repel = TRUE) +
+  labs(title = "Contribución de todos los datasets: 1º y 2º dimensión") +
+  theme_minimal()
+fviz_pca_var(pca_resultado,
+             axes=c(3,4),
+             select.var = list(name=var_filtradas2),
+             col.var = "contrib",           # Colorear por contribución
+             gradient.cols = c("red", "yellow", "green"),  # Paleta de colores
+             repel = TRUE) +                # Evita solapamiento de etiquetas
+  labs(title = "Contribución de todos los datasets: 3º y 4º dimensión") +
+  theme_minimal()
+```
+
+```{r}
+save( academicas, sociodemografia, poliformat,abandono,file="../../Datos/Capítulos/Exploratorio.RData")
+```
+
