@@ -2,8 +2,10 @@
 title: "Formateado 2"
 author: "Pablo Parrilla Cañadas"
 date: "2025-03-15"
-output: html_document
+output: pdf_document
 ---
+
+Librerías
 
 ```{r}
 library(readxl)
@@ -12,7 +14,7 @@ library(dplyr)
 library(lubridate)
 ```
 
-Vamos a cargar todos los conjuntos de datos
+Carga del conjunto de datos
 
 ```{r}
 dataset=read.csv("../../Datos/Iniciales/dataset_2024.csv",sep = ";")
@@ -22,7 +24,7 @@ estudiantes=read.csv("../../Datos/Iniciales/estudiantes_2024_rev.csv",sep=";")
 head(dataset)
 ```
 
-
+Unión de los datasets.
 
 ```{r}
 dataset=merge.data.frame(dataset,select(titulaciones, c("tit_hash","titnom")))
@@ -35,14 +37,17 @@ dataset_ordenado=dataset[,c(1:3,137:143,4:136)]
 head(dataset_ordenado)
 ```
 
+`
+Conversión de columnas numéricas que se han clasificado como cadena de texto al tener como separador una ",".
+
 ```{r}
 
-convertir_columnas_especificas <- function(df, columnas_a_convertir) {
-  df[columnas_a_convertir] <- lapply(df[columnas_a_convertir], function(col) {
-    col <- as.character(col)
-    col <- trimws(col)
-    col <- gsub(",", ".", col, fixed = TRUE)  
-    suppressWarnings(num_col <- as.double(col))
+convertir_columnas_especificas=function(df, columnas_a_convertir) {
+  df[columnas_a_convertir]=lapply(df[columnas_a_convertir], function(col) {
+    col=as.character(col)
+    col=trimws(col)
+    col=gsub(",", ".", col, fixed = TRUE)  
+    num_col=as.double(col)
     
     if (any(!is.na(num_col))) {
       return(num_col)
@@ -53,40 +58,47 @@ convertir_columnas_especificas <- function(df, columnas_a_convertir) {
   return(df)
 }
 
-columnas_a_convertir <- c(13, 28, 33:55, 56, 61:68, 70:72, 73,79:143)
+columnas_a_convertir=c(13, 28, 33:55, 56, 61:68, 70:72, 73,79:143)
 
-dataset_ordenado <- convertir_columnas_especificas(dataset_ordenado, columnas_a_convertir)
+dataset_ordenado=convertir_columnas_especificas(dataset_ordenado, columnas_a_convertir)
+
+
+dataset_ordenado$rend_total_ultimo=as.numeric(gsub(",", ".", dataset_ordenado$rend_total_ultimo))
+dataset_ordenado$activ1=as.numeric(gsub(",", ".", dataset_ordenado$activ1))
+
 summary(dataset_ordenado)
 ```
 
 
+Eliminación de variables o que no tiene sentido en este contexto, así como la conversión a tipo fecha tanto ed baja_fecha como fecha_datos
+
+
 ```{r}
-cat("Eliminadas:", names(dataset_ordenado)[s <- sapply(dataset_ordenado, function(col) all(is.na(col) | (is.character(col) & col == "")))], "\n"); dataset_ordenado <- dataset_ordenado[, !s, drop = FALSE]
+s=sapply(dataset_ordenado, function(col) all(is.na(col) | (is.character(col) & col == "")))
+cat("Eliminadas:", names(dataset_ordenado)[s], "\n")
 
-dataset_ordenado <- select(dataset_ordenado, -c("impagado_curso_mat", "ajuste1", "cred_mat5", "cred_mat6", "cred_sup_5o", "cred_sup_6o"))
+# Eliminar esas columnas
+dataset_ordenado=dataset_ordenado[, !s, drop = FALSE]
 
 
-dataset_ordenado$rend_total_ultimo <- as.numeric(gsub(",", ".", dataset_ordenado$rend_total_ultimo))
-dataset_ordenado$activ1 <- as.numeric(gsub(",", ".", dataset_ordenado$activ1))
+dataset_ordenado=select(dataset_ordenado, -c("impagado_curso_mat", "ajuste1", "cred_mat5", "cred_mat6", "cred_sup_5o", "cred_sup_6o"))
 
-dataset_ordenado$fecha_datos <- as.POSIXct(dataset_ordenado$fecha_datos, format="%Y-%m-%d %H:%M:%S")
+dataset_ordenado$fecha_datos=as.POSIXct(dataset_ordenado$fecha_datos, format="%Y-%m-%d %H:%M:%S")
 dataset_ordenado$baja_fecha=as.POSIXct(dataset_ordenado$baja_fecha, format="%Y-%m-%d")
 ```
+
+Extración de las variables de comportamiento digital en un dataset aparte. 
 
 ```{r}
 #estudiantes=select(dataset_ordenado,c(1:12,15:26,30:31,55:56,58))
 poliformat=select(dataset_ordenado,c(1:5,73:131))
 summary(poliformat)
-colnames(poliformat)
 ```
 
+Ordenación de las variables por mes. 
 
 ```{r}
-```
-
-
-```{r}
-filtrar_columnas_por_palabra <- function(df, palabra) {
+filtrar_columnas_por_palabra=function(df, palabra) {
   columnas_filtradas=grep(palabra, names(df), value = TRUE, ignore.case = TRUE)
   
   df_filtrado=df[, columnas_filtradas, drop = FALSE]
@@ -112,9 +124,9 @@ dataset_ordenado=dataset_ordenado[,1:72]
 dataset_ordenado=cbind(dataset_ordenado,eventos,logged,visits,minutes,wifi,resource_days,resource_events,assignment,test)
 
 #Formateamos a 0 para poder mostrar gráficas
-dataset_ordenado[,72:131 ] <- replace(dataset_ordenado[,72:131 ], is.na(dataset_ordenado[,72:131 ]), 0)
+dataset_ordenado[,72:131 ]=replace(dataset_ordenado[,72:131 ], is.na(dataset_ordenado[,72:131 ]), 0)
 
-dataset_ordenado[,c("discapacidad","desplazado","es_retitulado","exento_npp","es_adaptado") ] <- replace(dataset_ordenado[,c("discapacidad","desplazado","es_retitulado","exento_npp","es_adaptado")], is.na(dataset_ordenado[,c("discapacidad","desplazado","es_retitulado","exento_npp","es_adaptado") ]), 0)
+dataset_ordenado[,c("discapacidad","desplazado","es_retitulado","exento_npp","es_adaptado") ]=replace(dataset_ordenado[,c("discapacidad","desplazado","es_retitulado","exento_npp","es_adaptado")], is.na(dataset_ordenado[,c("discapacidad","desplazado","es_retitulado","exento_npp","es_adaptado") ]), 0)
 
 #a=dataset_ordenado
 #dataset_ordenado=a
@@ -130,21 +142,20 @@ dataset_ordenado$preferencia_seleccion=ifelse(dataset_ordenado$preferencia_selec
 table(dataset_ordenado$preferencia_seleccion)
 ```
 
+Creación de la variable "abandono" y su dataset asociado, ya filtrado para alumnos de ingeniería informática. Debe ser antes de filtrar por cuatrimestres, ya que, si no, se eliminarán asignaturas de las que alumnos se han desmatriculado. 
 
 
 ```{r}
-# Calcular el mes más frecuente de baja por alumno
-mes_abandono_por_alumno <- dataset_ordenado[dataset_ordenado$tit_hash=="0fecf9247f3d",] %>%
+mes_abandono_por_alumno=dataset_ordenado[dataset_ordenado$tit_hash=="0fecf9247f3d",] %>%
   filter(!is.na(baja_fecha)) %>%
-  mutate(mes = month(baja_fecha, label = TRUE, abbr = FALSE)) %>%
+  mutate(mes = month(baja_fecha, label = TRUE, abbr = FALSE),ordered=FALSE) %>%
   group_by(dni_hash, mes) %>%
   summarise(asi_left = n(), .groups = "drop") %>%
   group_by(dni_hash) %>%
   slice_max(asi_left, n = 1, with_ties = FALSE) %>%
   ungroup()
 
-# Fecha más frecuente de baja por alumno (sin agregar a mes)
-fecha <- dataset_ordenado[dataset_ordenado$tit_hash=="0fecf9247f3d",] %>%
+fecha=dataset_ordenado[dataset_ordenado$tit_hash=="0fecf9247f3d",] %>%
   filter(!is.na(baja_fecha)) %>%
   group_by(dni_hash, baja_fecha) %>%
   summarise(n = n(), .groups = "drop") %>%
@@ -152,8 +163,7 @@ fecha <- dataset_ordenado[dataset_ordenado$tit_hash=="0fecf9247f3d",] %>%
   slice_max(order_by = n, n = 1, with_ties = FALSE) %>%
   select(-n)
 
-# Conteo de asignaturas dejadas y etiqueta de abandono (más de 5)
-conteo_abandonos <- dataset_ordenado[dataset_ordenado$tit_hash=="0fecf9247f3d",] %>%
+conteo_abandonos=dataset_ordenado[dataset_ordenado$tit_hash=="0fecf9247f3d",] %>%
   group_by(dni_hash) %>%
   summarise(
     asi_left = sum(!is.na(baja_fecha)),
@@ -161,8 +171,7 @@ conteo_abandonos <- dataset_ordenado[dataset_ordenado$tit_hash=="0fecf9247f3d",]
     .groups = "drop"
   )
 
-# Combinar resumen de abandono, fecha y mes, manteniendo tit_hash
-abandono <- dataset_ordenado[dataset_ordenado$tit_hash=="0fecf9247f3d",] %>%
+abandono=dataset_ordenado[dataset_ordenado$tit_hash=="0fecf9247f3d",] %>%
   distinct(dni_hash, tit_hash, .keep_all = FALSE) %>%
   left_join(conteo_abandonos, by = "dni_hash") %>%
   left_join(fecha, by = "dni_hash") %>%
@@ -173,26 +182,26 @@ abandono[abandono$asi_left>12,]
 abandono=abandono[abandono$tit_hash=="0fecf9247f3d" & abandono$abandono==1,]
 abandono=select(.data = abandono, -c(tit_hash))
 
-
+abandono$mes=factor(abandono$mes,ordered =FALSE)
 
 ```
 
-Cogemos asignaturas del primer cuatrimestre. 
+Filtramos por asignaturas del primer cuatrimestre, ya que no tenemos las demás. No conseguí sacarlas mediante web scrapping de la web de la UPV, así que de momento la he cogido a mano. 
 
 ```{r}
-codigos_A <- c(11540, 11542, 11541, 11545, 11547, 11548, 11549, 11553, 11555, 11557, 11560, 11561, 11563, 11564, 11566, 11570, 11572, 11569, 11574, 11580, 14918, 11584, 11575, 11577, 11593, 11594, 11591, 11590, 11592, 11595, 11596, 11599, 11604, 11603, 11606, 11609, 11608, 11613, 11614, 13762, 13763, 13764, 13765, 11657, 11649, 11645, 11653, 11615, 11616, 13771, 13772, 13773, 13795, 11641, 14066)
+codigos_A=c(11540, 11542, 11541, 11545, 11547, 11548, 11549, 11553, 11555, 11557, 11560, 11561, 11563, 11564, 11566, 11570, 11572, 11569, 11574, 11580, 14918, 11584, 11575, 11577, 11593, 11594, 11591, 11590, 11592, 11595, 11596, 11599, 11604, 11603, 11606, 11609, 11608, 11613, 11614, 13762, 13763, 13764, 13765, 11657, 11649, 11645, 11653, 11615, 11616, 13771, 13772, 13773, 13795, 11641, 14066)
 
 
-dataset_ordenado <- dataset_ordenado %>%
+dataset_ordenado=dataset_ordenado %>%
   left_join(asignaturas[, c("asi", "asi_hash")], by = "asi_hash") %>%
   filter(asi %in% codigos_A) %>%
   select(-asi)
 ```
 
-```{r}
-colnames(dataset_ordenado)
-```
 
+
+
+Reparación de valores muy extremos. 
 
 ```{r}
 dataset_ordenado$resource_events_2024_10[dataset_ordenado$resource_events_2024_10>400]=400
@@ -204,6 +213,10 @@ dataset_ordenado[,127:131]=tests
 ```
 
 
+
+Creación de las variables suma de los comportamientos para una asignatura concreta a lo largo del mes. 
+
+
 ```{r}
 dataset_ordenado$evento_poliformat_asg=rowSums(dataset_ordenado[,73:79])
 dataset_ordenado$loggins_asg=rowSums(dataset_ordenado[,80:86])
@@ -213,8 +226,9 @@ dataset_ordenado$n_res_day_asg=rowSums(dataset_ordenado[,108:114])
 dataset_ordenado$n_res_events_asg=rowSums(dataset_ordenado[,115:121])
 dataset_ordenado$asign_asg=rowSums(dataset_ordenado[,122:126])
 dataset_ordenado$test_asg=rowSums(dataset_ordenado[,127:131])
-dataset_ordenado
 ```
+
+Creación de las columnas de comportamiento digital por estudiante. Son las suma de todas las interacciones de un ámbito concreto para todas las asignaturas.
 
 ```{r}
 columnas_a_sumar=colnames(dataset_ordenado[,c(73:100,108:131)])
@@ -224,12 +238,12 @@ dataset_ordenado=dataset_ordenado %>%
   mutate(across(all_of(columnas_a_sumar), ~ sum(.x, na.rm = TRUE), .names = "{.col}_est")) %>%
   ungroup()
 
-colnames(dataset_ordenado[,c(73:100,108:131)])
+head(dataset_ordenado[,c(73:100,108:131)])
 
 
 ```
 
-Aprovechamos para filtrar informática
+Filtramos ya por informática en el dataset, eliminando el nombre del título y su código hash. 
 
 ```{r warning=FALSE}
 dataset_ordenado= dataset_ordenado[dataset_ordenado$tit_hash=="0fecf9247f3d",]
@@ -239,12 +253,13 @@ dataset_ordenado=select(dataset_ordenado, -c("tit_hash","titnom"))
 
 ```
 
-Vale, aquí vamos a separar en varios dataset y según necesitemos vamos concatenando, porque si no, esto es un desastre.
+
+Vale, aquí vamos a separar en varios dataset y los concatenaremos y haremos los últimos retoques. 
 
 
 ```{r}
-#tabla <- as.data.frame(table(df))
-#tabla <- tabla[order(-tabla$Freq), ]
+#tabla=as.data.frame(table(df))
+#tabla=tabla[order(-tabla$Freq), ]
 
 
 columnas_utiles=c(
@@ -344,12 +359,19 @@ poliformat=dataset_ordenado[,c("dni_hash","asinom", "evento_poliformat_asg",
   "pft_test_submissions_2024_9_est", "pft_test_submissions_2024_10_est",
   "pft_test_submissions_2024_11_est", "pft_test_submissions_2024_12_est",
   "pft_test_submissions_2025_1_est")]
+```
 
+
+Retocamos los datasets. Para poliformat, lo hacemos úico por estudiante y hacemos la media de las varibles asg, eliminando las originales. 
+
+A todas les concatenamos abandono desde el dataset de abandono, y hacemos el filtro de estudiantes que tenían asignaturas del primer cuatri (no tenemos datos del segundo cuatrimestre).
+
+```{r}
 poliformat= poliformat %>% 
    left_join(select(abandono, dni_hash, abandono), by = "dni_hash") %>% unique()
 
 
-poliformat <- poliformat %>%
+poliformat=poliformat %>%
   group_by(dni_hash) %>%
   mutate(across(ends_with("_asg"), ~ mean(.x, na.rm = TRUE), .names = "{.col}_media")) %>%
   select(-c("evento_poliformat_asg",
@@ -371,11 +393,11 @@ poliformat$abandono[is.na(poliformat$abandono)]=0
 sociodemografia$abandono[is.na(sociodemografia$abandono)]=0
 academicas$abandono[is.na(academicas$abandono)]=0
 
-dni_abandono_1 <- sociodemografia %>%
+dni_abandono_1=sociodemografia %>%
   filter(abandono == 1) %>%
   pull(dni_hash)
 
-abandono <- abandono %>%
+abandono=abandono %>%
   filter(dni_hash %in% dni_abandono_1)
 
 
@@ -384,22 +406,22 @@ poliformat$minutos_asg=rowSums(poliformat[,24:30])
 ```
 
 
-Ahora, con todo mucho más dividido, vamos a estudiarlo más en profundidad.
+Ahora, con todo mucho más dividido, cambiamos los tipos character a tipo factor.
 
 ```{r}
-colnames(sociodemografia)
 sociodemografia[, c("sexe", "prov_origen", "tipo_ingreso",  
                     "estudios_p", "estudios_m", "dedicacion", "desplazado", 
-                    "discapacidad", "becado", "preferencia_seleccion", "abandono","nacionalitat")] <- 
+                    "discapacidad", "becado", "preferencia_seleccion", "abandono","nacionalitat")]=
   lapply(sociodemografia[, c("sexe", "prov_origen", "tipo_ingreso",  
                              "estudios_p", "estudios_m", "dedicacion", "desplazado", 
                              "discapacidad", "becado", "preferencia_seleccion", "abandono","nacionalitat")],as.factor)
 
-academicas[, c("exento_npp", "es_adaptado", "es_retitulado","curso_mas_bajo","curso_mas_alto")] <- 
+academicas[, c("exento_npp", "es_adaptado", "es_retitulado","curso_mas_bajo","curso_mas_alto")]=
   lapply(academicas[, c("exento_npp", "es_adaptado", "es_retitulado","curso_mas_bajo","curso_mas_alto")],as.factor)
 
 ```
 
+Guardamos los datos
 
 ```{r}
 save( academicas, sociodemografia, poliformat,abandono, file="../../Datos/Capítulos/Preprocesado.RData")

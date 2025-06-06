@@ -2,8 +2,10 @@
 title: "3. Caracterización del alumnado que abandona"
 author: "Pablo Parrilla Cañadas"
 date: "2025-04-29"
-output: html_document
+output: pdf_document
 ---
+
+Librerías
 
 ```{r}
 library(dplyr)
@@ -31,8 +33,9 @@ library(fastDummies)
 library(stringr)
 library(forcats)
 library(DescTools)
+library(patchwork)
 
-load("../../Datos/Capítulos/Preprocesado.RData")
+load("../../Datos/Capítulos/Exploratorio.RData")
 ```
 
 # Contextualización
@@ -44,15 +47,15 @@ table(abandono$mes)
 
 ```{r fig.width=8}
 
-abandono_date <- abandono %>%
+abandono_date=abandono %>%
   mutate(baja_fecha = as.Date(baja_fecha))
-# Agrupar por fecha y contar las bajas
-abandono_acumulado <- abandono_date[abandono_date$mes=="septiembre",] %>%
+ 
+abandono_acumulado=abandono_date[abandono_date$mes=="septiembre",] %>%
   count(baja_fecha) %>%
   arrange(baja_fecha) %>%
-  mutate(acumulado = cumsum(n))  # Suma acumulada
+  mutate(acumulado = cumsum(n))   
 
-# Crear la gráfica
+ 
 a=ggplot(abandono_acumulado, aes(x = baja_fecha, y = acumulado)) +
   geom_line(color = "black", size = 1) + 
   geom_point(color = "red", size = 3) + 
@@ -64,12 +67,12 @@ a=ggplot(abandono_acumulado, aes(x = baja_fecha, y = acumulado)) +
   theme_minimal()+
    theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-abandono_acumulado <- abandono_date[abandono_date$mes=="julio",] %>%
+abandono_acumulado=abandono_date[abandono_date$mes=="julio",] %>%
   count(baja_fecha) %>%
   arrange(baja_fecha) %>%
-  mutate(acumulado = cumsum(n))  # Suma acumulada
+  mutate(acumulado = cumsum(n))   
 
-# Crear la gráfica
+ 
 b=ggplot(abandono_acumulado, aes(x = baja_fecha, y = acumulado)) +
   geom_line(color = "black", size = 1) + 
   geom_point(color = "red", size = 3) + 
@@ -87,10 +90,10 @@ grid.arrange(b,a,ncol=2)
 
 
 ```{r}
-total_abandonadas <- sum(abandono$asi_left, na.rm = TRUE)
+total_abandonadas=sum(abandono$asi_left, na.rm = TRUE)
 
-# Calcular la media de asi_left por mes y el porcentaje del total
-media_abandono_por_mes <- abandono %>%
+ 
+media_abandono_por_mes=abandono %>%
   group_by(mes) %>%
   summarise(
     media_asi_left = mean(asi_left, na.rm = TRUE),
@@ -98,10 +101,8 @@ media_abandono_por_mes <- abandono %>%
   ) %>% arrange(desc(porcentaje))
   
 
-# Mostrar resultado
+ 
 print(media_abandono_por_mes)
-
-mean(abandono$asi_left)
 
 ```
 
@@ -109,63 +110,63 @@ mean(abandono$asi_left)
 
 ```{r}
 
-vars_usar <- c("nacionalitat", "data_nac", "sexe", "alta_universitat", "prov_origen",
+vars_usar=c("nacionalitat", "data_nac", "sexe", "alta_universitat", "prov_origen",
                "anyo_ingreso", "tipo_ingreso", "nota10", "nota14", "estudios_p", "estudios_m",
                "dedicacion", "desplazado", "discapacidad", "becado", "preferencia_seleccion", "abandono")
 
-# Subset del dataset
-df_sel <- sociodemografia[, vars_usar]
+ 
+df_sel=sociodemografia[, vars_usar]
 
 df_sel$abandono=as.factor(df_sel$abandono)
 
-# 🔁 TRANSFORMACIONES MANUALES
+ 
 
-# Asegura que 'abandono' es numérica binaria
-df_sel$abandono <- as.numeric(as.character(df_sel$abandono))
+ 
+df_sel$abandono=as.numeric(as.character(df_sel$abandono))
 
-# Separar variables numéricas y categóricas
-num_vars <- vars_usar[sapply(df_sel[, vars_usar], is.numeric)]
-cat_vars <- vars_usar[sapply(df_sel[, vars_usar], function(x) is.character(x) || is.factor(x))]
+ 
+num_vars=vars_usar[sapply(df_sel[, vars_usar], is.numeric)]
+cat_vars=vars_usar[sapply(df_sel[, vars_usar], function(x) is.character(x) || is.factor(x))]
 
-# Inicializar resultados
-resultados <- data.frame(variable = character(),
+ 
+resultados=data.frame(variable = character(),
                          correlacion = numeric(),
                          tipo = character(),
                          stringsAsFactors = FALSE)
 
-# 📈 Correlaciones numéricas (Pearson)
+ 
 for (var in num_vars) {
   if (var != "abandono") {
-    valor <- suppressWarnings(cor(df_sel$abandono, df_sel[[var]], use = "complete.obs"))
-    resultados <- rbind(resultados, data.frame(variable = var, correlacion = valor, tipo = "Numérica"))
+    valor=suppressWarnings(cor(df_sel$abandono, df_sel[[var]], use = "complete.obs"))
+    resultados=rbind(resultados, data.frame(variable = var, correlacion = valor, tipo = "Numérica"))
   }
 }
 
-# Correlaciones categóricas (Cramér’s V corregido)
+ 
 for (var in cat_vars) {
-  x <- as.factor(df_sel$abandono)
-  y <- as.factor(df_sel[[var]])
+  x=as.factor(df_sel$abandono)
+  y=as.factor(df_sel[[var]])
   
-  df_temp <- data.frame(x = x, y = y)
-  df_temp <- df_temp[complete.cases(df_temp), ]
+  df_temp=data.frame(x = x, y = y)
+  df_temp=df_temp[complete.cases(df_temp), ]
   
-  # Verifica niveles útiles
+   
   if (nlevels(df_temp$x) >= 2 && nlevels(df_temp$y) >= 2) {
-    # Agrupar niveles infrecuentes directamente en el data.frame
-    df_temp$y <- fct_lump_min(df_temp$y, min = 2)
-    df_temp$y <- droplevels(df_temp$y)
+     
+    df_temp$y=fct_lump_min(df_temp$y, min = 2)
+    df_temp$y=droplevels(df_temp$y)
     
-    # Tabla cruzada corregida
-    v <- DescTools::CramerV(table(df_temp$x, df_temp$y), bias.correct = TRUE)
+     
+    v=DescTools::CramerV(table(df_temp$x, df_temp$y), bias.correct = TRUE)
     
-    resultados <- rbind(resultados, data.frame(variable = var, correlacion = v, tipo = "Categórica"))
+    resultados=rbind(resultados, data.frame(variable = var, correlacion = v, tipo = "Categórica"))
   }
 }
 
 
-resultados
+head(resultados)
 
-# 🎨 Gráfico
+ 
 ggplot(resultados, aes(x = reorder(variable, correlacion), y = correlacion, fill = tipo)) +
   geom_bar(stat = "identity") +
   coord_flip() +
@@ -192,8 +193,8 @@ table(sociodemografia$becado,sociodemografia$abandono)
 
 ```{r fig.width=10,fig.height=5}
 
-# Convierte el data frame a formato largo (long)
-df_long <- sociodemografia[sociodemografia$abandono==1,] %>%
+ 
+df_long=sociodemografia[sociodemografia$abandono==1,] %>%
   pivot_longer(cols = c(anyo_ingreso, alta_universitat,data_nac), names_to = "variable", values_to = "valor")
 
 ggplot(df_long, aes(x = variable,y=valor, fill = variable)) +
@@ -206,10 +207,10 @@ ggplot(df_long, aes(x = variable,y=valor, fill = variable)) +
 
 
 ```{r}
-multi_vars <- c("tipo_ingreso", "preferencia_seleccion","becado", "estudios_p", "estudios_m")
+multi_vars=c("tipo_ingreso", "preferencia_seleccion","becado", "estudios_p", "estudios_m")
 
-# Crear lista de plots individuales ordenados por frecuencia
-plots_multi <- lapply(multi_vars, function(var) {
+ 
+plots_multi=lapply(multi_vars, function(var) {
   ggplot(sociodemografia[sociodemografia$abandono==1,], aes(x = fct_infreq(.data[[var]]), fill = .data[[var]])) +
     geom_bar() +
     scale_fill_discrete() +
@@ -218,19 +219,19 @@ plots_multi <- lapply(multi_vars, function(var) {
     theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
 })
 
-# Mostrar en grid de 2x2
+ 
 grid.arrange(grobs = plots_multi, ncol = 3)
 ```
 
 ```{r fig.height=8, fig.width=10}
-# Grupos de variables
-binarias_1 <- c("nacionalitat", "sexe")
-binarias_3 <- c("prov_origen", "desplazado")
-binarias_2 <- c("discapacidad","dedicacion" )
+ 
+binarias_1=c("nacionalitat", "sexe")
+binarias_3=c("prov_origen", "desplazado")
+binarias_2=c("discapacidad","dedicacion" )
 
-# Función que crea un gráfico para un grupo de variables
-crear_plot_binarias <- function(vars) {
-  df <- sociodemografia[sociodemografia$abandono==1,] %>%
+ 
+crear_plot_binarias=function(vars) {
+  df=sociodemografia[sociodemografia$abandono==1,] %>%
     select(all_of(vars)) %>%
     pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor") %>%
     filter(!is.na(Valor)) %>%
@@ -253,98 +254,98 @@ crear_plot_binarias <- function(vars) {
           axis.text.x = element_text(angle = 45, hjust = 1))
 }
 
-# Crear los gráficos
-plot1 <- crear_plot_binarias(binarias_1)
-plot2 <- crear_plot_binarias(binarias_2)
-plot3 <- crear_plot_binarias(binarias_3)
+ 
+plot1=crear_plot_binarias(binarias_1)
+plot2=crear_plot_binarias(binarias_2)
+plot3=crear_plot_binarias(binarias_3)
 
-# Mostrar todos en un grid
+ 
 grid.arrange(plot1, plot2, plot3, nrow = 3)
 ```
 
 ```{r}
 
-# Supón que df_sel es tu dataset con abandono
-# Variables que te interesan
-vars <- c("nacionalitat", "data_nac", "alta_universitat", "prov_origen",
+ 
+ 
+vars=c("nacionalitat", "data_nac", "alta_universitat", "prov_origen",
                "anyo_ingreso", "tipo_ingreso",
                "dedicacion", "desplazado", "becado", "preferencia_seleccion", "abandono")
 
-# 1. Subset y quita NA
-df_model <- sociodemografia[, c("abandono", vars)] %>% na.omit()
+ 
+df_model=sociodemografia[, c("abandono", vars)] %>% na.omit()
 
-# 2. One-hot encoding para categóricas
-df_encoded <- dummy_cols(df_model, select_columns = c("tipo_ingreso","dedicacion", "desplazado", "becado", "preferencia_seleccion"),
+ 
+df_encoded=dummy_cols(df_model, select_columns = c("tipo_ingreso","dedicacion", "desplazado", "becado", "preferencia_seleccion"),
                          remove_selected_columns = TRUE, remove_first_dummy = FALSE)
 
-# 3. Calcular matriz de distancia
-dist_mat <- dist(df_encoded %>% select(-abandono), method = "euclidean")
+ 
+dist_mat=dist(df_encoded %>% select(-abandono), method = "euclidean")
 
-# 4. PERMANOVA
+ 
 a=adonis2(dist_mat ~ abandono, data = df_encoded, permutations = 999)
 a
 ```
 
 
-# Académicas
+ 
 
 ```{r}
-vars_usar <- colnames(academicas[2:44])
+vars_usar=colnames(academicas[2:43])
 
 
-# Subset del dataset
-df_sel <- academicas[, vars_usar]
+ 
+df_sel=academicas[, vars_usar]
 
 df_sel$abandono=as.factor(df_sel$abandono)
 
-# 🔁 TRANSFORMACIONES MANUALES
+ 
 
-# Asegura que 'abandono' es numérica binaria
-df_sel$abandono <- as.numeric(as.character(df_sel$abandono))
+ 
+df_sel$abandono=as.numeric(as.character(df_sel$abandono))
 
-# Separar variables numéricas y categóricas
-num_vars <- vars_usar[sapply(df_sel[, vars_usar], is.numeric)]
-cat_vars <- vars_usar[sapply(df_sel[, vars_usar], function(x) is.character(x) || is.factor(x))]
+ 
+num_vars=vars_usar[sapply(df_sel[, vars_usar], is.numeric)]
+cat_vars=vars_usar[sapply(df_sel[, vars_usar], function(x) is.character(x) || is.factor(x))]
 
-# Inicializar resultados
-resultados <- data.frame(variable = character(),
+ 
+resultados=data.frame(variable = character(),
                          correlacion = numeric(),
                          tipo = character(),
                          stringsAsFactors = FALSE)
 
-# 📈 Correlaciones numéricas (Pearson)
+ 
 for (var in num_vars) {
   if (var != "abandono") {
-    valor <- suppressWarnings(cor(df_sel$abandono, df_sel[[var]], use = "complete.obs"))
-    resultados <- rbind(resultados, data.frame(variable = var, correlacion = valor, tipo = "Numérica"))
+    valor=suppressWarnings(cor(df_sel$abandono, df_sel[[var]], use = "complete.obs"))
+    resultados=rbind(resultados, data.frame(variable = var, correlacion = valor, tipo = "Numérica"))
   }
 }
 
-# Correlaciones categóricas (Cramér’s V corregido)
+ 
 for (var in cat_vars) {
-  x <- as.factor(df_sel$abandono)
-  y <- as.factor(df_sel[[var]])
+  x=as.factor(df_sel$abandono)
+  y=as.factor(df_sel[[var]])
   
-  df_temp <- data.frame(x = x, y = y)
-  df_temp <- df_temp[complete.cases(df_temp), ]
+  df_temp=data.frame(x = x, y = y)
+  df_temp=df_temp[complete.cases(df_temp), ]
   
-  # Verifica niveles útiles
+   
   if (nlevels(df_temp$x) >= 2 && nlevels(df_temp$y) >= 2) {
-    # Agrupar niveles infrecuentes directamente en el data.frame
-    df_temp$y <- fct_lump_min(df_temp$y, min = 2)
-    df_temp$y <- droplevels(df_temp$y)
+     
+    df_temp$y=fct_lump_min(df_temp$y, min = 2)
+    df_temp$y=droplevels(df_temp$y)
     
-    # Tabla cruzada corregida
-    v <- DescTools::CramerV(table(df_temp$x, df_temp$y), bias.correct = TRUE)
+     
+    v=DescTools::CramerV(table(df_temp$x, df_temp$y), bias.correct = TRUE)
     
-    resultados <- rbind(resultados, data.frame(variable = var, correlacion = v, tipo = "Categórica"))
+    resultados=rbind(resultados, data.frame(variable = var, correlacion = v, tipo = "Categórica"))
   }
 }
 
 
 resultados
 
-# 🎨 Gráfico
+ 
 ggplot(resultados, aes(x = reorder(variable, correlacion), y = correlacion, fill = tipo)) +
   geom_bar(stat = "identity") +
   coord_flip() +
@@ -364,31 +365,31 @@ table(academicas$curso_mas_bajo,academicas$curso_mas_alto,academicas$abandono)
 ```
 
 ```{r}
-grupo_creditos_altos <- c( "cred_sup_tit", "cred_mat_normal", "cred_mat_total")
+grupo_creditos_altos=c( "cred_sup_tit", "cred_mat_normal", "cred_mat_total")
 
-grupo_creditos_moderados <- c( "cred_ptes_acta", "cred_sup_1o", "cred_sup_2o", "cred_sup_3o","cred_sup_4o")
+grupo_creditos_moderados=c( "cred_ptes_acta", "cred_sup_1o", "cred_sup_2o", "cred_sup_3o","cred_sup_4o")
 
-grupo_creditos_individuales <- c("cred_mat1", "cred_mat2", "cred_mat3", "cred_mat4", "cred_mat_sem_a",  "cred_mat_sem_b", "cred_mat_anu")
+grupo_creditos_individuales=c("cred_mat1", "cred_mat2", "cred_mat3", "cred_mat4", "cred_mat_sem_a",  "cred_mat_sem_b", "cred_mat_anu")
 
-grupo_creditos_especiales <- c("cred_sup", "cred_sup_espec", "cred_sup_normal", "cred_sup_sem_a", "cred_sup_sem_b", "cred_sup_total", "cred_mat_movilidad", "cred_mat_practicas")
+grupo_creditos_especiales=c("cred_sup", "cred_sup_espec", "cred_sup_normal", "cred_sup_sem_a", "cred_sup_sem_b", "cred_sup_total", "cred_mat_movilidad", "cred_mat_practicas")
 
-grupo_otros_academicos <- c("practicas", "pract1", "asig1", "activ1", "actividades", "ajuste", "total1")
+grupo_otros_academicos=c("practicas", "pract1", "asig1", "activ1", "actividades", "ajuste", "total1")
 
-rendimientos <- c("rendimiento_cuat_a", "rendimiento_total", "rend_total_ultimo", "rend_total_penultimo","rend_total_antepenultimo")
+rendimientos=c("rendimiento_cuat_a", "rendimiento_total", "rend_total_ultimo", "rend_total_penultimo","rend_total_antepenultimo")
 
 
 
-# Transformar a formato largo para ggplot
-df_long <- academicas[academicas$abandono==1,] %>%
+ 
+df_long=academicas[academicas$abandono==1,] %>%
   select(all_of(grupo_creditos_altos)) %>%
   pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
 
-conteos <- df_long %>%
+conteos=df_long %>%
   filter(!is.na(Valor)) %>%
   group_by(Variable) %>%
   summarise(n = n())
 
-# Crear gráfico con etiquetas de conteo
+ 
 ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, na.rm = TRUE))) +
   geom_boxplot(fill = "skyblue", outlier.size = 0.7) +
   geom_text(data = conteos, aes(x = Inf, y = fct_reorder(Variable, -n), label = paste0("n = ", n)),
@@ -399,8 +400,8 @@ ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, 
 
 ```{r}
 
-# Transformar a formato largo para ggplot
-df_long <- academicas[academicas$abandono==1,] %>%
+ 
+df_long=academicas[academicas$abandono==1,] %>%
   select(all_of(grupo_creditos_moderados)) 
   
 df_long[df_long==0]=NA
@@ -408,12 +409,12 @@ df_long[df_long==0]=NA
 df_long=df_long%>%
   pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
 
-conteos <- df_long %>%
+conteos=df_long %>%
   filter(!is.na(Valor)) %>%
   group_by(Variable) %>%
   summarise(n = n())
 
-# Crear gráfico con etiquetas de conteo
+ 
 ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, na.rm = TRUE))) +
   geom_boxplot(fill = "skyblue", outlier.size = 0.7) +
   geom_text(data = conteos, aes(x = Inf, y = fct_reorder(Variable, -n), label = paste0("n = ", n)),
@@ -425,8 +426,8 @@ ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, 
 
 
 ```{r}
-# Transformar a formato largo para ggplot
-df_long <- academicas[academicas$abandono==1,] %>%
+ 
+df_long=academicas[academicas$abandono==1,] %>%
   select(all_of(grupo_creditos_individuales)) 
 
 df_long[df_long==0]=NA
@@ -434,12 +435,12 @@ df_long[df_long==0]=NA
 df_long=df_long%>%
   pivot_longer(cols = everything(), names_to = "Variable", values_to = "Valor")
 
-conteos <- df_long %>%
+conteos=df_long %>%
   filter(!is.na(Valor)) %>%
   group_by(Variable) %>%
   summarise(n = n())
 
-# Crear gráfico con etiquetas de conteo
+ 
 ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, na.rm = TRUE))) +
   geom_boxplot(fill = "skyblue", outlier.size = 0.7) +
   geom_text(data = conteos, aes(x = Inf, y = fct_reorder(Variable, -n), label = paste0("n = ", n)),
@@ -450,7 +451,7 @@ ggplot(df_long, aes(x = Valor, y = fct_reorder(Variable, -Valor, .fun = median, 
 ```
 
 ```{r}
-vars <- c( "curso_mas_bajo", "curso_mas_alto", "cred_mat1",
+vars=c( "curso_mas_bajo", "curso_mas_alto", "cred_mat1",
   "cred_mat2", "cred_mat3", "cred_mat4", "cred_sup_normal",
   "cred_sup_espec", "cred_sup", "cred_mat_normal", "cred_mat_movilidad",
   "cred_ptes_acta", "cred_mat_practicas", "cred_mat_sem_a", "cred_mat_sem_b",
@@ -463,48 +464,48 @@ vars <- c( "curso_mas_bajo", "curso_mas_alto", "cred_mat1",
   "rend_total_penultimo", "rend_total_antepenultimo"
 )
 
-# 1. Subset y quita NA
-df_model <- academicas[, c("abandono", vars)]
+ 
+df_model=academicas[, c("abandono", vars)]
 
-# 2. One-hot encoding para categóricas
+ 
 
-# 3. Calcular matriz de distancia
-dist_mat <- dist(df_model %>% select(-abandono), method = "euclidean")
+ 
+dist_mat=dist(df_model %>% select(-abandono), method = "euclidean")
 
-# 4. PERMANOVA
+ 
 a=adonis2(dist_mat ~ abandono, data = df_model, permutations = 999)
 a
 ```
 
 
-# Digital
+ 
 
 ```{r fig.height=6}
 
 
-vars_usar <- colnames(poliformat[2:69])
+vars_usar=colnames(poliformat[2:69])
 
-# Subset del dataset
-df_sel <- poliformat[, vars_usar]
-df_sel$abandono <- as.numeric(as.character(poliformat$abandono))
+ 
+df_sel=poliformat[, vars_usar]
+df_sel$abandono=as.numeric(as.character(poliformat$abandono))
 
-# Separar variables numéricas y categóricas
-num_vars <- vars_usar[sapply(df_sel[, vars_usar], is.numeric)]
-cat_vars <- vars_usar[sapply(df_sel[, vars_usar], function(x) is.character(x) || is.factor(x))]
+ 
+num_vars=vars_usar[sapply(df_sel[, vars_usar], is.numeric)]
+cat_vars=vars_usar[sapply(df_sel[, vars_usar], function(x) is.character(x) || is.factor(x))]
 
-# Inicializar resultados
-resultados <- data.frame(variable = character(),
+ 
+resultados=data.frame(variable = character(),
                          correlacion = numeric(),
                          tipo = character(),
                          mes = character(),
                          stringsAsFactors = FALSE)
 
-extraer_mes <- function(nombre) {
-  # Caso 1: termina en _est
+extraer_mes=function(nombre) {
+   
   if (str_detect(nombre, "_\\d{1,2}_est$")) {
     return(str_extract(nombre, "\\d{1,2}(?=_est$)"))
   }
-  # Caso 2: empieza con n_wifi_days y termina con un número
+   
   if (str_detect(nombre, "^n_wifi_days_2024_\\d{1,2}$")) {
     return(str_extract(nombre, "\\d{1,2}$"))
   }
@@ -512,50 +513,50 @@ extraer_mes <- function(nombre) {
   if (str_detect(nombre, "^n_wifi_days_2025_\\d{1,2}$")) {
     return(str_extract(nombre, "\\d{1,2}$"))
   }
-  # Caso 3: termina en _media
+   
   if (str_ends(nombre, "_media")) {
     return("Media")
   }
   return("Desconocido")
 }
-# 📈 Correlaciones numéricas
+ 
 for (var in num_vars) {
   if (var != "abandono") {
-    valor <- suppressWarnings(cor(df_sel$abandono, df_sel[[var]], use = "complete.obs"))
-    mes <- extraer_mes(var)
-    resultados <- rbind(resultados, data.frame(variable = var, correlacion = valor, tipo = "Numérica", mes = mes))
+    valor=suppressWarnings(cor(df_sel$abandono, df_sel[[var]], use = "complete.obs"))
+    mes=extraer_mes(var)
+    resultados=rbind(resultados, data.frame(variable = var, correlacion = valor, tipo = "Numérica", mes = mes))
   }
 }
 
-# 📊 Categóricas
+ 
 for (var in cat_vars) {
-  x <- as.factor(df_sel$abandono)
-  y <- as.factor(df_sel[[var]])
+  x=as.factor(df_sel$abandono)
+  y=as.factor(df_sel[[var]])
   
-  df_temp <- data.frame(x = x, y = y) %>% na.omit()
+  df_temp=data.frame(x = x, y = y) %>% na.omit()
   
   if (nlevels(df_temp$x) >= 2 && nlevels(df_temp$y) >= 2) {
-    df_temp$y <- fct_lump_min(df_temp$y, min = 2) %>% droplevels()
-    v <- DescTools::CramerV(table(df_temp$x, df_temp$y), bias.correct = TRUE)
-    mes <- extraer_mes(var)
-    resultados <- rbind(resultados, data.frame(variable = var, correlacion = v, tipo = "Categórica", mes = mes))
+    df_temp$y=fct_lump_min(df_temp$y, min = 2) %>% droplevels()
+    v=DescTools::CramerV(table(df_temp$x, df_temp$y), bias.correct = TRUE)
+    mes=extraer_mes(var)
+    resultados=rbind(resultados, data.frame(variable = var, correlacion = v, tipo = "Categórica", mes = mes))
   }
 }
 
-# Define el orden manual de niveles
-niveles_ordenados <- c("7", "8", "9", "10", "11", "12", "1", "Media")
+ 
+niveles_ordenados=c("7", "8", "9", "10", "11", "12", "1", "Media")
 
-# Convertir la columna 'mes' en factor con ese orden
-resultados$mes <- factor(resultados$mes, levels = niveles_ordenados)
+ 
+resultados$mes=factor(resultados$mes, levels = niveles_ordenados)
 
 # Paleta de colores manual
-colores_meses <- c(
+colores_meses=c(
   "7" = "#F8766D", "8" = "#D89000", "9" = "#A3A500", 
   "10" = "#39B600", "11" = "#00BF7D", "12" = "#00BFC4", 
-  "1" = "#619CFF", "Media" = "#BDBDBD"  # gris claro o azul tenue
+  "1" = "#619CFF", "Media" = "#BDBDBD"
 )
 
-# Gráfico actualizado
+ 
 ggplot(resultados, aes(x = reorder(variable, correlacion), y = correlacion, fill = mes)) +
   geom_bar(stat = "identity") +
   coord_flip() +
@@ -570,40 +571,40 @@ ggplot(resultados, aes(x = reorder(variable, correlacion), y = correlacion, fill
 ```
 
 ```{r}
-lineas_multiple=poliformat_enterolineas_multiple <- function(df, columnas, titulo) {
-  # Verificar si la columna "abandono" existe
+lineas_multiple=poliformat_enterolineas_multiple=function(df, columnas, titulo) {
+   
   if (!"abandono" %in% names(df)) {
     stop("La columna 'abandono' no existe en el dataframe.")
   }
 
-  # Convertir columnas numéricas a nombres si hace falta
+   
   if (is.numeric(columnas)) {
-    columnas <- names(df)[columnas]
+    columnas=names(df)[columnas]
   }
 
-  # Reemplazar NA por 0
-  df$abandono <- ifelse(is.na(df$abandono), 0, df$abandono)
+   
+  df$abandono=ifelse(is.na(df$abandono), 0, df$abandono)
 
-  # Seleccionar columnas
-  df_seleccionado <- df[, c(columnas, "abandono"), drop = FALSE]
-  df_seleccionado <- df_seleccionado[sapply(df_seleccionado, is.numeric)]
+   
+  df_seleccionado=df[, c(columnas, "abandono"), drop = FALSE]
+  df_seleccionado=df_seleccionado[sapply(df_seleccionado, is.numeric)]
 
-  df_valores <- df_seleccionado[, setdiff(names(df_seleccionado), "abandono"), drop = FALSE]
+  df_valores=df_seleccionado[, setdiff(names(df_seleccionado), "abandono"), drop = FALSE]
   if (ncol(df_valores) == 0) {
     message("No hay columnas numéricas en la selección.")
     return(NULL)
   }
 
-  df_valores$ID <- 1:nrow(df_valores)
-  df_valores$abandono <- df_seleccionado$abandono
+  df_valores$ID=1:nrow(df_valores)
+  df_valores$abandono=df_seleccionado$abandono
 
-  df_melt <- reshape2::melt(df_valores, id.vars = c("ID", "abandono"),
+  df_melt=reshape2::melt(df_valores, id.vars = c("ID", "abandono"),
                             variable.name = "Variable", value.name = "Valor")
   
-  df_melt$Variable <- factor(df_melt$Variable, levels = columnas)
+  df_melt$Variable=factor(df_melt$Variable, levels = columnas)
 
-  df_negro <- df_melt[df_melt$abandono == 0, ]
-  df_rojo  <- df_melt[df_melt$abandono == 1, ]
+  df_negro=df_melt[df_melt$abandono == 0, ]
+  df_rojo =df_melt[df_melt$abandono == 1, ]
   
   df_rojo=unique(df_rojo)
   df_negro=unique(df_negro)
@@ -620,23 +621,155 @@ lineas_multiple=poliformat_enterolineas_multiple <- function(df, columnas, titul
           panel.grid.minor = element_blank())
 }
 
-g1 <- lineas_multiple(poliformat, c(2:8), "Comparación: \nEventos de Poliformat")
-g2 <- lineas_multiple(poliformat, c(9:15), "Comparación: \nDías con Sesiones iniciadas")
-g3 <- lineas_multiple(poliformat, c(16:22), "Comparación: \nVisitas a asignaturas")
-g4 <- lineas_multiple(poliformat, c(23:29), "Comparación: \nMinutos Totales")
-g5 <- lineas_multiple(poliformat, c(38:43), "Comparación: \nDías accedidos a Recursos \nde una asignatura")
-g6 <- lineas_multiple(poliformat, c(44:50), "Comparación: \nAcciones en recursos \n de una asignatura")
-g7 <- lineas_multiple(poliformat, c(51:55), "Comparación: \nTareas entregadas en \nuna asignatura")
-g8 <- lineas_multiple(poliformat, c(56:60), "Comparación: \nTests entregados en \nuna asignatura")
+g1=lineas_multiple(poliformat, c(2:8), "Comparación: \nEventos de Poliformat")
+g2=lineas_multiple(poliformat, c(9:15), "Comparación: \nDías con Sesiones iniciadas")
+g3=lineas_multiple(poliformat, c(16:22), "Comparación: \nVisitas a asignaturas")
+g4=lineas_multiple(poliformat, c(23:29), "Comparación: \nMinutos Totales")
+g5=lineas_multiple(poliformat, c(37:43), "Comparación: \nDías accedidos a Recursos \nde una asignatura")
+g6=lineas_multiple(poliformat, c(44:50), "Comparación: \nAcciones en recursos \n de una asignatura")
+g7=lineas_multiple(poliformat, c(51:55), "Comparación: \nTareas entregadas en \nuna asignatura")
+g8=lineas_multiple(poliformat, c(56:60), "Comparación: \nTests entregados en \nuna asignatura")
 
 
-grid_1 <- grid.arrange(g1, g2, ncol = 2)
-grid_2 <- grid.arrange(g3, g4, ncol = 2)
-grid_3 <- grid.arrange(g5, g6, ncol = 2)
-grid_4 <- grid.arrange(g7, g8, ncol = 2)
+grid_1=grid.arrange(g1, g2, ncol = 2)
+grid_2=grid.arrange(g3, g4, ncol = 2)
+grid_3=grid.arrange(g5, g6, ncol = 2)
+grid_4=grid.arrange(g7, g8, ncol = 2)
 ```
 
 ```{r}
-lineas_multiple(poliformat, c(56:60), "Comparación: \nConexiones al wifi")
+lineas_multiple(poliformat, c(30:36), "Comparación: \nConexiones al wifi")
+```
+
+```{r fig.height=10, fig.width=10}
+variables_asg=function(df, variable, titulo, filename) {
+   
+  if (!variable %in% names(df)) {
+    stop(paste("La variable", variable, "no existe en el dataframe."))
+  }
+  if (!is.numeric(df[[variable]])) {
+    stop("La variable debe ser numérica.")
+  }
+
+   
+  df_filtrado=df[df[[variable]] > 0, ]
+
+   
+  c=ggplot(df, aes(x = .data[[variable]], y = "")) +
+    geom_boxplot(fill = "#2a9d8f", alpha = 0.5) +
+    labs(title = paste0(titulo), x = variable, y = "") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  ggsave(paste0("./Comportamiento digital y su relación con el abandono/",filename))
+  c
+
+}
+
+p1=variables_asg(poliformat[poliformat$abandono==1,], "evento_poliformat_asg_media", "Eventos en una asignatura: \ncomparación","comp_evento_asg.jpeg")
+p2=variables_asg(poliformat[poliformat$abandono==1,], "loggins_asg_media", "Días con accesos a una asignatura: \ncomparación","comp_loggins_asg.jpeg")
+p3=variables_asg(poliformat[poliformat$abandono==1,], "visitas_asg_media", "Visitas a una asignatura: \ncomparación","comp_visitas_asg.jpeg")
+p4=variables_asg(poliformat[poliformat$abandono==1,], "minutos_asg_media", "Minutos dedicados a una asignatura: \ncomparación","comp_minutes_asg.jpeg")
+p5=variables_asg(poliformat[poliformat$abandono==1,], "n_res_day_asg_media", "Días accedidos a recursos\n de una asignatura: comparación","comp_n_res_dat_asg.jpeg")
+p6=variables_asg(poliformat[poliformat$abandono==1,], "n_res_events_asg_media", "Total de acciones en Recursos\n de una asignatura: comparación","comp_n_res_events_asg.jpeg")
+p7=variables_asg(poliformat[poliformat$abandono==1,], "asign_asg_media", "Tareas entregadas\nen una asignatura: comparación","comp_asig_asg.jpeg")
+p8=variables_asg(poliformat[poliformat$abandono==1,], "test_asg_media", "Tests entregados \nen una asignatura: comparación","comp_test_asg.jpeg")
+
+(p1 + p2 + p3) /(p4+p5 + p6)/(p7+p8)
+```
+```{r eval=FALSE, include=FALSE}
+plot_truncado_directo=function(tipo_var, indices, df_poliformat, df_abandono) {
+
+   
+  vars_tipo=names(df_poliformat)[indices]
+  df_sel=df_poliformat[, c("dni_hash", vars_tipo)]
+
+  df_aband=df_abandono %>%
+    filter(!is.na(baja_fecha)) %>%
+    mutate(
+      mes_baja = lubridate::month(baja_fecha),
+      mes_baja_adj = ifelse(mes_baja == 1, 13, mes_baja)
+    ) %>%
+    select(dni_hash, mes_baja, mes_baja_adj)
+
+   
+  df_join=df_sel %>%
+    inner_join(df_aband, by = "dni_hash")
+
+   
+  var_meses=as.numeric(stringr::str_extract(vars_tipo, "(?<=202[4-5]_)(\\d{1,2})"))
+  var_meses_adj=ifelse(var_meses == 1, 13, var_meses)
+
+   
+  for (i in seq_along(vars_tipo)) {
+    col=vars_tipo[i]
+    mes_col=var_meses_adj[i]
+    df_join[[col]]=ifelse(df_join$mes_baja_adj < mes_col, NA, df_join[[col]])
+  }
+
+   
+  df_long=df_join %>%
+    tidyr::pivot_longer(cols = all_of(vars_tipo), names_to = "variable", values_to = "valor") %>%
+    mutate(
+      mes = as.numeric(stringr::str_extract(variable, "(?<=202[4-5]_)(\\d{1,2})")),
+      mes_adj = ifelse(mes == 1, 13, mes),
+      mes_factor = factor(mes, levels = c(7, 8, 9, 10, 11, 12, 1), ordered = TRUE)
+    )
+
+   
+  df_long=df_long %>%
+    left_join(df_aband, by = "dni_hash")
+
+   
+  puntos_baja=df_long %>%
+    dplyr::filter(mes_adj == mes_baja_adj)
+
+   
+  ggplot(df_long, aes(x = mes_factor, y = valor, group = dni_hash)) +
+    geom_line(alpha = 0.3, color = "black", na.rm = TRUE) +
+    geom_point(data = puntos_baja, aes(x = mes_factor, y = valor), color = "red", size = 1.5, na.rm = TRUE) +
+    theme_minimal() +
+    labs(
+      title = paste("Evolución mensual (solo abandonos) de", tipo_var),
+      x = "Mes del curso",
+      y = "Valor por estudiante"
+    )
+}
+
+
+
+
+g1=plot_truncado_directo("eventos", c(2:8), poliformat, abandono)
+g2=plot_truncado_individual("loggins", c(9:15), poliformat, abandono)
+g3=plot_truncado_directo("visitas", c(16:22), poliformat, abandono)
+g4=plot_truncado_directo("minutos", c(23:29), poliformat, abandono)
+g5=plot_truncado_directo("dias_recursos", c(37:43), poliformat, abandono)
+g6=plot_truncado_directo("acciones_recursos", c(44:50), poliformat, abandono)
+g7=plot_truncado_directo("tareas", c(51:55), poliformat, abandono)
+g8=plot_truncado_directo("tests", c(56:60), poliformat, abandono)
+
+
+grid_1=grid.arrange(g1, g2, ncol = 2)
+grid_2=grid.arrange(g3, g4, ncol = 2)
+grid_3=grid.arrange(g5, g6, ncol = 2)
+grid_4=grid.arrange(g7, g8, ncol = 2)
+```
+
+
+```{r}
+ 
+
+df_model=poliformat[, 2:69]
+
+
+ 
+dist_mat=dist(df_model %>% select(-abandono), method = "euclidean")
+
+ 
+a=adonis2(dist_mat ~ abandono, data = df_model, permutations = 999)
+a
+```
+
+```{r}
+save(abandono, academicas, poliformat, sociodemografia, file="../../Datos/Capítulos/Caracterización.Rdata")
 ```
 

@@ -1,0 +1,454 @@
+---
+title: "Identificación de perfiles estudiantiles con técnicas de clustering"
+author: "Pablo Parrilla Cañadas"
+date: "2025-05-31"
+output: pdf_document
+---
+
+```{r}
+rm(list=ls())
+library(dplyr)
+library(fastDummies)
+library(grid)
+library(cluster)
+library(factoextra)
+library(caret)
+library(gridExtra)
+```
+
+
+```{r}
+load("../../Datos/Capítulos/Caracterización.Rdata")
+```
+
+Preparar y concatenar
+
+```{r}
+ 
+num_vars <- poliformat[poliformat$abandono==1,] %>% select(where(is.numeric))
+
+num_vars= num_vars[,2:length(num_vars)]
+ 
+
+ 
+datos_pca <- num_vars
+ 
+preprocess <- preProcess(datos_pca, method = "medianImpute")
+datos_imputados <- predict(preprocess, newdata = datos_pca)
+
+ 
+datos_filtrados <- datos_imputados[, sapply(datos_imputados, function(col) var(col, na.rm = TRUE) != 0)]
+
+
+ 
+pca_poliformat <- prcomp(datos_filtrados, scale. = TRUE)
+
+fviz_eig(pca_poliformat, addlabels = TRUE, main="PCA Poliformat Abandono")
+```
+
+
+
+```{r}
+ambas=academicas[academicas$abandono==1,] %>% left_join(sociodemografia[academicas$abandono==1,], by="dni_hash") %>% select(-c("abandono.x","abandono.y")) %>% left_join(abandono[,c(1,5)], by="dni_hash") %>% select(-"dni_hash")
+
+ 
+ 
+numeric_vars <- ambas %>% select(where(is.numeric))
+categorical_vars <- ambas %>% select(where(~is.factor(.)))
+
+ 
+ 
+categorical_dummy <- fastDummies::dummy_cols(categorical_vars, remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+
+ 
+combined <- bind_cols(numeric_vars, categorical_dummy)
+
+ 
+```
+
+
+```{r}
+
+ 
+combined$actividades <- NULL
+
+ 
+combined$nota14[is.na(combined$nota14)] <- median(combined$nota14, na.rm = TRUE)
+
+ 
+combined <- combined %>%
+  select(-rend_total_ultimo, -rend_total_penultimo, -rend_total_antepenultimo)
+
+
+ 
+combined_scaled <- scale(combined)
+
+pca_df=pca_poliformat$x[,1:3]
+
+
+ 
+final_dataset <- as.data.frame(cbind(combined_scaled, pca_df))
+final_dataset <- final_dataset[, colSums(is.na(final_dataset)) < nrow(final_dataset)]
+
+rownames(final_dataset)=1:52
+```
+
+
+
+```{r}
+midist <- get_dist(final_dataset, stand = TRUE, method = "euclidean")
+fviz_dist(midist, show_labels = TRUE, lab_size = 0.3,
+          gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))+labs(title = "Distancia original euclídea")
+```
+
+
+```{r}
+set.seed(10)
+myN = c(7,25,37)  # m
+myhopkins = NULL
+myseed = sample(1:52, 2)
+for (i in myN) {
+  for (j in myseed) {
+    tmp = get_clust_tendency(data = final_dataset, n = i, graph = FALSE, seed = j)
+    myhopkins = c(myhopkins, tmp$hopkins_stat)
+  }
+}
+summary(myhopkins)
+datos_elegidos=final_dataset
+```
+
+Método de Ward
+
+```{r}
+p1 = fviz_nbclust(x =datos_elegidos, FUNcluster = hcut, method = "silhouette", 
+                  hc_method = "ward.D2", k.max = 10, verbose = FALSE, 
+                  hc_metric = "euclidean") + labs(title = "Nº óptimo clusters: Ward")
+p2 = fviz_nbclust(x = datos_elegidos, FUNcluster = hcut, method = "wss", 
+                  hc_method = "ward.D2", k.max = 10, verbose = FALSE, 
+                  hc_metric = "euclidean") + labs(title = "Nº óptimo clusters: Ward")
+grid.arrange(p1, p2, nrow = 1)
+```
+
+```{r}
+K=4
+
+clust1 <- hclust(midist, method="ward.D2")
+grupos1 <- cutree(clust1, k=K)
+
+fviz_cluster(object = list(data=datos_elegidos, cluster=grupos1), stand = FALSE,
+             ellipse.type = "convex", geom = "point", show.clust.cent = TRUE,
+             labelsize = 8)  +
+  labs(title = "Modelo jerarquico + Proyeccion PCA",
+       subtitle = "Dist euclidea, Metodo de Ward, K=2") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+Método de la media
+
+
+
+
+```{r}
+p1 = fviz_nbclust(x = datos_elegidos, FUNcluster = hcut, method = "silhouette", 
+                  hc_method = "average", k.max = 10, verbose = FALSE, 
+                  hc_metric = "euclidean") + labs(title = "Nº óptimo clusters: Media")
+p2 = fviz_nbclust(x = datos_elegidos, FUNcluster = hcut, method = "wss", 
+                  hc_method = "average", k.max = 10, verbose = FALSE, 
+                  hc_metric = "euclidean") + labs(title = "Nº óptimo clusters: Media")
+grid.arrange(p1, p2, nrow = 1)
+```
+
+
+```{r}
+K=3
+
+clust1 <- hclust(midist, method="average")
+grupos1 <- cutree(clust1, k=K)
+
+fviz_cluster(object = list(data=datos_elegidos, cluster=grupos1), stand = FALSE,
+             ellipse.type = "convex", geom = "point", show.clust.cent = FALSE,
+             labelsize = 8)  +
+  labs(title = "Modelo jerarquico + Proyeccion PCA",
+       subtitle = "Dist euclidea, Metodo Media, K=3") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+
+Partición
+
+k-means
+
+
+
+```{r}
+p1 = fviz_nbclust(x = datos_elegidos, FUNcluster = kmeans, method = "silhouette", 
+             k.max = 10, verbose = FALSE) +
+  labs(title = "Nº óptimo clusters: K-means")
+p2 = fviz_nbclust(x = datos_elegidos, FUNcluster = kmeans, method = "wss", 
+             k.max = 10, verbose = FALSE) +
+  labs(title = "Nº óptimo clusters: K-means")
+grid.arrange(p1, p2, nrow = 1)
+```
+
+```{r}
+
+k=3
+clust3 <- kmeans(datos_elegidos, centers = k, nstart = 20)
+
+p1 = fviz_cluster(object = list(data=datos_elegidos, cluster=clust3$cluster), stand = FALSE,
+             ellipse.type = "convex", geom = "point", show.clust.cent = TRUE,
+             labelsize = 8)  +
+  labs(title = "K-MEDIAS + Proyeccion PCA",
+       subtitle = "Dist euclidea, K=3") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+grid.arrange(p1,nrow = 1)
+```
+
+
+pam
+
+```{r}
+p1 = fviz_nbclust(x = datos_elegidos, FUNcluster = pam, method = "silhouette", 
+             k.max = 10, verbose = FALSE) +
+  labs(title = "Nº óptimo clusters: PAM")
+p2 = fviz_nbclust(x = datos_elegidos, FUNcluster = pam, method = "wss", 
+             k.max = 10, verbose = FALSE) +
+  labs(title = "Nº óptimo clusters: PAM")
+grid.arrange(p1, p2, nrow = 1)
+```
+
+
+```{r}
+k=4
+clust4 <- pam(datos_elegidos, k = k)
+table(clust4$clustering)
+
+p1 = fviz_cluster(object = list(data=datos_elegidos, cluster=clust4$clustering), stand = FALSE,
+             ellipse.type = "convex", geom = "point", show.clust.cent = FALSE,
+             labelsize = 8)  +
+  labs(title = "K-MEDOIDES + Proyeccion PCA",
+       subtitle = "Dist euclidea, K=7") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+grid.arrange(p1,nrow = 1)
+```
+
+
+Cuáles son esos dos estudiantes porsaqueros?
+
+```{r}
+ 
+cluster_sizes <- table(clust4$clustering)
+outlier_clusters <- names(cluster_sizes[cluster_sizes == 1])
+
+ 
+outlier_ids <- which(clust4$clustering %in% outlier_clusters)
+
+ 
+datos_elegidos[outlier_ids, ]
+
+datos_filtrados <- final_dataset[-outlier_ids, ]
+
+ambas=ambas[-outlier_ids, ]
+
+
+```
+
+
+# Filtrado
+
+
+```{r}
+midist <- get_dist(datos_filtrados, stand = TRUE, method = "euclidean")
+fviz_dist(midist, show_labels = TRUE, lab_size = 0.3,
+          gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))+labs(title = "Distancia euclídea sin outliers")
+```
+
+```{r}
+set.seed(10)
+myN = c(7,25,37)  # m
+myhopkins = NULL
+myseed = sample(1:52, 2)
+for (i in myN) {
+  for (j in myseed) {
+    tmp = get_clust_tendency(data = datos_filtrados, n = i, graph = FALSE, seed = j)
+    myhopkins = c(myhopkins, tmp$hopkins_stat)
+  }
+}
+summary(myhopkins)
+datos_elegidos=datos_filtrados
+```
+
+```{r}
+K=1
+
+clust1 <- hclust(midist, method="ward.D2")
+grupos1 <- cutree(clust1, k=K)
+
+fviz_cluster(object = list(data=datos_elegidos, cluster=grupos1), stand = FALSE,
+             ellipse.type = "convex", geom = "point", show.clust.cent = TRUE,
+             labelsize = 8)  +
+  labs(title = "Proyección previa",
+       subtitle = "Dist euclidea, Metodo Ward, K=1") +
+  theme_bw()
+```
+
+
+
+Método de Ward
+
+
+```{r}
+p1 = fviz_nbclust(x =datos_elegidos, FUNcluster = hcut, method = "silhouette", 
+                  hc_method = "ward.D2", k.max = 10, verbose = FALSE, 
+                  hc_metric = "euclidean") + labs(title = "Nº óptimo clusters: Ward")
+p2 = fviz_nbclust(x = datos_elegidos, FUNcluster = hcut, method = "wss", 
+                  hc_method = "ward.D2", k.max = 10, verbose = FALSE, 
+                  hc_metric = "euclidean") + labs(title = "Nº óptimo clusters: Ward")
+grid.arrange(p1, p2, nrow = 1)
+```
+
+```{r}
+K=4
+
+clust1 <- hclust(midist, method="ward.D2")
+grupos1 <- cutree(clust1, k=K)
+
+fviz_cluster(object = list(data=datos_elegidos, cluster=grupos1), stand = FALSE,
+             ellipse.type = "convex", geom = "point", show.clust.cent = TRUE,
+             labelsize = 8)  +
+  labs(title = "Modelo jerarquico + Proyeccion PCA",
+       subtitle = "Dist euclidea, Metodo Ward, K=4") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+Método de la media
+
+
+
+
+```{r}
+p1 = fviz_nbclust(x = datos_elegidos, FUNcluster = hcut, method = "silhouette", 
+                  hc_method = "average", k.max = 10, verbose = FALSE, 
+                  hc_metric = "euclidean") + labs(title = "Nº óptimo clusters: Media")
+p2 = fviz_nbclust(x = datos_elegidos, FUNcluster = hcut, method = "wss", 
+                  hc_method = "average", k.max = 10, verbose = FALSE, 
+                  hc_metric = "euclidean") + labs(title = "Nº óptimo clusters: Media")
+grid.arrange(p1, p2, nrow = 1)
+```
+
+
+```{r}
+K=4
+
+clust1 <- hclust(midist, method="average")
+grupos1 <- cutree(clust1, k=K)
+
+fviz_cluster(object = list(data=datos_elegidos, cluster=grupos1), stand = FALSE,
+             ellipse.type = "convex", geom = "point", show.clust.cent = TRUE,
+             labelsize = 8)  +
+  labs(title = "Modelo jerarquico + Proyeccion PCA",
+       subtitle = "Dist euclidea, Metodo Media, K=4") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+
+Partición
+
+k-means
+
+
+
+```{r}
+p1 = fviz_nbclust(x = datos_elegidos, FUNcluster = kmeans, method = "silhouette", 
+             k.max = 10, verbose = FALSE) +
+  labs(title = "Nº óptimo clusters: K-means")
+p2 = fviz_nbclust(x = datos_elegidos, FUNcluster = kmeans, method = "wss", 
+             k.max = 10, verbose = FALSE) +
+  labs(title = "Nº óptimo clusters: K-means")
+grid.arrange(p1, p2, nrow = 1)
+```
+
+```{r}
+
+k=2
+clust3 <- kmeans(datos_elegidos, centers = k, nstart = 20)
+
+p1 = fviz_cluster(object = list(data=datos_elegidos, cluster=clust3$cluster), stand = FALSE,
+             ellipse.type = "convex", geom = "point", show.clust.cent = TRUE,
+             labelsize = 8)  +
+  labs(title = "K-MEDIAS + Proyeccion PCA",
+       subtitle = "Dist euclidea, K=2") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+grid.arrange(p1,nrow = 1)
+```
+
+
+pam
+
+```{r}
+p1 = fviz_nbclust(x = datos_elegidos, FUNcluster = pam, method = "silhouette", 
+             k.max = 10, verbose = FALSE) +
+  labs(title = "Nº óptimo clusters: PAM")
+p2 = fviz_nbclust(x = datos_elegidos, FUNcluster = pam, method = "wss", 
+             k.max = 10, verbose = FALSE) +
+  labs(title = "Nº óptimo clusters: PAM")
+grid.arrange(p1, p2, nrow = 1)
+```
+
+
+```{r}
+k=3
+clust4 <- pam(datos_elegidos, k = k)
+table(clust4$clustering)
+
+p1 = fviz_cluster(object = list(data=datos_elegidos, cluster=clust4$clustering), stand = FALSE,
+             ellipse.type = "convex", geom = "point", show.clust.cent = FALSE,
+             labelsize = 8)  +
+  labs(title = "K-MEDOIDES + Proyeccion PCA",
+       subtitle = "Dist euclidea, K=3") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+grid.arrange(p1,nrow = 1)
+```
+
+
+
+
+
+
+
+
+
+
+Final: Ward
+
+```{r}
+
+clust1 <- hclust(midist, method="ward.D2")
+grupos1 <- cutree(clust1, k=4)
+
+fviz_cluster(object = list(data=datos_elegidos, cluster=grupos1), stand = FALSE,
+             ellipse.type = "convex", geom = "point", show.clust.cent = TRUE,
+             labelsize = 8)  +
+  labs(title = "Modelo jerarquico + Proyeccion PCA",
+       subtitle = "Dist euclidea, Metodo Ward, K=3") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+datos_filtrados$cluster <- as.factor(cutree(clust1, k = 4))
+resumen_centros <- aggregate(. ~ cluster, data = datos_filtrados, FUN = mean, na.rm = TRUE)
+#write.csv(resumen_centros, "resumen_centros_clusters.csv", row.names = FALSE)
+print(resumen_centros)
+
+dim(resumen_centros)
+```
+
