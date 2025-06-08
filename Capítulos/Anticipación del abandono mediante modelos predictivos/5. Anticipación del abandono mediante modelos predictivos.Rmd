@@ -1,0 +1,107 @@
+---
+title: "5. Anticipación del abandono mediante modelos predictivos"
+author: "Pablo Parrilla Cañadas"
+date: "2025-06-05"
+output: pdf_document
+---
+
+Librerías
+
+```{r}
+rm(list=ls())
+library(dplyr)
+library(fastDummies)
+library(grid)
+library(cluster)
+library(factoextra)
+library(caret)
+library(gridExtra)
+
+library(DMwR2)
+library(themis)
+library(recipes)
+library(ROSE)
+library(smotefamily)
+
+```
+
+```{r}
+load("../../Datos/Capítulos/Caracterización.Rdata")
+```
+
+
+```{r}
+# 1. Preparar dataset 'ambas'
+ambas = academicas %>% left_join(select(sociodemografia, -c("abandono")), by = "dni_hash")
+ambas$nota14[is.na(ambas$nota14)] = median(ambas$nota14, na.rm = TRUE)
+
+ambas <- ambas %>%
+  select(
+    -rendimiento_cuat_a,
+    -rendimiento_total,
+    -actividades,
+    -ajuste,
+    -pract1,
+    -activ1,
+    -total1,
+    -rend_total_ultimo,
+    -rend_total_penultimo,
+    -rend_total_antepenultimo
+  )
+
+ambas_prep = ambas[, 2:length(ambas)]
+
+# 2. Imputación por kNN (excepto abandono que es factor)
+ambas_limpio <- VIM::kNN(ambas_prep, k = 5, imp_var = FALSE)
+
+# 3. Asegurar que abandono sea factor
+ambas_limpio$abandono = as.factor(ambas_limpio$abandono)
+
+# 4. PCA de poliformat (no se toca)
+num_vars = poliformat %>% select(where(is.numeric))
+num_vars = num_vars[, 2:length(num_vars)]
+pca_poliformat = prcomp(num_vars, scale. = TRUE)
+pca_df = pca_poliformat$x[, 1:6]
+
+# 5. Combinar con ambas_limpio
+final_dataset = as.data.frame(cbind(ambas_limpio[, 2:ncol(ambas_limpio)], pca_df))
+
+# 6. Convertir factores a dummies (excepto abandono)
+library(fastDummies)
+y <- final_dataset$abandono
+X <- final_dataset %>%
+  select(-abandono) %>%
+  dummy_cols(remove_selected_columns = TRUE, remove_first_dummy = TRUE)
+
+final_dataset_dummies <- bind_cols(X, abandono = y)
+final_dataset_dummies$abandono <- as.factor(final_dataset_dummies$abandono)
+
+final_dataset_dummies[,-83] <- final_dataset_dummies[-83] %>%
+  select(-which(grepl("Desconocido", names(.)) & colSums(.) == 0))
+```
+
+final_dataset_dummies
+Vamos probar varias técnicas de resampling.
+
+
+ # Smote
+
+```{r}
+balanced_data=SMOTE(final_dataset_dummies[,-83],final_dataset_dummies[,83],K = 5,dup_size = 2 )
+datos_sintéticos=balanced_data$syn_data
+```
+
+# Rose
+
+```{r}
+# Calculamos el nuevo total de registros deseado
+n_majority=sum(final_dataset_dummies$abandono==0)
+n_minority_target=52*3
+n_total=n_majority + n_minority_target
+
+# Aplicamos ROSE SOLO para generar datos sintéticos
+rose_out <- ROSE( abandono ~ ., data = final_dataset_dummies, N = n_total, p = n_minority_target/n_total,seed = 20)$data
+
+table(rose_out$abandono)
+```
+

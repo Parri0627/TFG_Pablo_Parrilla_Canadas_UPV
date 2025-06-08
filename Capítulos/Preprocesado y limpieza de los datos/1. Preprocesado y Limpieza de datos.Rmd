@@ -8,6 +8,7 @@ output: pdf_document
 Librerías
 
 ```{r}
+rm(list=ls())
 library(readxl)
 library(readr)
 library(dplyr)

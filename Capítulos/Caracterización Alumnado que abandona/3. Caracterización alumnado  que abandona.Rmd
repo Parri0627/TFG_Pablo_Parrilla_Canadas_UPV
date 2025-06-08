@@ -8,6 +8,7 @@ output: pdf_document
 Librerías
 
 ```{r}
+rm(list=ls())
 library(dplyr)
 library(ggplot2)
 library(reshape2)
@@ -676,7 +677,9 @@ p8=variables_asg(poliformat[poliformat$abandono==1,], "test_asg_media", "Tests e
 
 (p1 + p2 + p3) /(p4+p5 + p6)/(p7+p8)
 ```
-```{r eval=FALSE, include=FALSE}
+
+
+{r eval=FALSE, include=FALSE}
 plot_truncado_directo=function(tipo_var, indices, df_poliformat, df_abandono) {
 
    
@@ -752,7 +755,7 @@ grid_1=grid.arrange(g1, g2, ncol = 2)
 grid_2=grid.arrange(g3, g4, ncol = 2)
 grid_3=grid.arrange(g5, g6, ncol = 2)
 grid_4=grid.arrange(g7, g8, ncol = 2)
-```
+
 
 
 ```{r}
@@ -768,6 +771,81 @@ dist_mat=dist(df_model %>% select(-abandono), method = "euclidean")
 a=adonis2(dist_mat ~ abandono, data = df_model, permutations = 999)
 a
 ```
+
+PCA con todo para ver lo solapados que pueden estar.
+
+```{r}
+datos=sociodemografia %>%
+  left_join(select(academicas,-c("abandono")), by = "dni_hash") %>% 
+  left_join(select(poliformat,-c("abandono")), by="dni_hash")
+
+grupo <- as.factor(datos$abandono)
+datos <- datos %>% select(-abandono)
+
+cols_con_na_en_abandono <- datos %>%
+  select(-dni_hash) %>%
+  select(where(~ any(is.na(.)))) %>%
+  names()
+
+datos <- datos %>% select(-all_of(cols_con_na_en_abandono))
+
+num_vars <- datos %>% select(where(is.numeric))
+cat_vars <- datos %>% select(where(is.factor))
+
+cat_dummies <- dummy_cols(cat_vars, remove_first_dummy = TRUE, remove_selected_columns = TRUE)
+
+datos_pca <- bind_cols(num_vars, cat_dummies) %>%
+  select(where(~ var(., na.rm = TRUE) > 0))
+
+pca_result <- prcomp(datos_pca, scale. = TRUE)
+
+fviz_eig(pca_result, addlabels = TRUE,main="PCA Completo")
+```
+
+
+```{r}
+
+a=fviz_pca_ind(pca_result,
+             geom.ind = "point",
+             col.ind = grupo,
+             palette = c("steelblue", "tomato"),
+             addEllipses = TRUE,
+             legend.title = "Abandono") +
+  theme_minimal()
+
+b=fviz_pca_ind(pca_result,
+             geom.ind = "point",
+             col.ind = grupo,
+             palette = c("steelblue", "tomato"),
+             addEllipses = TRUE,
+             legend.title = "Abandono",axes=c(3,4)) +
+            
+  theme_minimal()
+
+
+c=fviz_pca_ind(pca_result,
+             geom.ind = "point",
+             col.ind = grupo,
+             palette = c("steelblue", "tomato"),
+             addEllipses = TRUE,
+             legend.title = "Abandono",axes=c(5,6)) +
+            
+  theme_minimal()
+
+d=fviz_pca_ind(pca_result,
+             geom.ind = "point",
+             col.ind = grupo,
+             palette = c("steelblue", "tomato"),
+             addEllipses = TRUE,
+             legend.title = "Abandono",axes=c(7,8)) +
+            
+  theme_minimal()
+
+grid.arrange(a,b,c,d,ncol=2)
+```
+
+
+
 
 ```{r}
 save(abandono, academicas, poliformat, sociodemografia, file="../../Datos/Capítulos/Caracterización.Rdata")

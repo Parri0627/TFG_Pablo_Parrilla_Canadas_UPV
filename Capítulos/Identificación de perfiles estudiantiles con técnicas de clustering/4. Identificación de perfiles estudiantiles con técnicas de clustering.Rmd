@@ -33,11 +33,8 @@ num_vars= num_vars[,2:length(num_vars)]
  
 datos_pca <- num_vars
  
-preprocess <- preProcess(datos_pca, method = "medianImpute")
-datos_imputados <- predict(preprocess, newdata = datos_pca)
-
  
-datos_filtrados <- datos_imputados[, sapply(datos_imputados, function(col) var(col, na.rm = TRUE) != 0)]
+datos_filtrados <- datos_imputados[, sapply(datos_pca, function(col) var(col, na.rm = TRUE) != 0)]
 
 
  
@@ -63,7 +60,7 @@ categorical_dummy <- fastDummies::dummy_cols(categorical_vars, remove_first_dumm
  
 combined <- bind_cols(numeric_vars, categorical_dummy)
 
- 
+
 ```
 
 

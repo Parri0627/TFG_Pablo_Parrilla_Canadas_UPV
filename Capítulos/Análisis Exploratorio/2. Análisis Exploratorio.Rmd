@@ -8,6 +8,7 @@ output: pdf_document
 Librerías
 
 ```{r}
+rm(list=ls())
 library(dplyr)
 library(ggplot2)
 library(reshape2)
@@ -27,6 +28,7 @@ library(tidyr)
 library(forcats)
 library(FactoMineR)
 library(fastDummies)
+library(VIM)
 
 load("../../Datos/Capítulos/Preprocesado.RData")
 ```
@@ -672,11 +674,9 @@ ggplot(melt_socio_aca_filt, aes(x = Categórica, y = Numérica, fill = correlaci
 
 PCA y scree plots de todos los datasets anteriores.
 
-```{r fig.width=12}
+```{r}
 num_vars=sociodemografia %>% select(where(is.numeric))
-cat_vars=sociodemografia %>% select(where(is.factor) | where(is.character)) %>% 
-  select(-dni_hash)   
-
+cat_vars=sociodemografia %>% select(where(is.factor) )
  
 cat_dummies=dummy_cols(cat_vars, remove_first_dummy = TRUE, remove_selected_columns = TRUE)
 
@@ -686,15 +686,11 @@ datos_pca=bind_cols(num_vars, cat_dummies)
  
 datos_pca=datos_pca[, sapply(datos_pca, function(x) var(x, na.rm = TRUE) > 0)]
 
- 
-preprocess=preProcess(datos_pca, method = "medianImpute")
-datos_imputados=predict(preprocess, newdata = datos_pca)
+datos_knn <- VIM::kNN(datos_pca, k = 5, imp_var = FALSE)
 
  
-pca_resultado=prcomp(datos_imputados, scale. = TRUE)
+pca_resultado=prcomp(datos_knn, scale. = TRUE)
 
- 
-summary(pca_resultado)
 fviz_eig(pca_resultado, addlabels = TRUE, main = "PCA socio")
 fviz_pca_var(pca_resultado,
              col.var = "contrib",            
@@ -719,8 +715,7 @@ fviz_pca_var(pca_resultado,
 ```{r fig.width=10}
  
 num_vars=academicas %>% select(where(is.numeric))
-cat_vars=academicas %>% select(where(is.factor) | where(is.character)) %>% 
-  select(-dni_hash)   
+cat_vars=academicas %>% select(where(is.factor) ) 
 
  
 cat_dummies=dummy_cols(cat_vars, remove_first_dummy = TRUE, remove_selected_columns = TRUE)
@@ -732,11 +727,10 @@ datos_pca=bind_cols(num_vars, cat_dummies)
 datos_pca=datos_pca[, sapply(datos_pca, function(x) var(x, na.rm = TRUE) > 0)]
 
  
-preprocess=preProcess(datos_pca, method = "medianImpute")
-datos_imputados=predict(preprocess, newdata = datos_pca)
+datos_knn <- VIM::kNN(datos_pca, k = 5, imp_var = FALSE)
 
  
-pca_resultado=prcomp(datos_imputados, scale. = TRUE)
+pca_resultado=prcomp(datos_knn, scale. = TRUE)
 
  
 summary(pca_resultado)
@@ -755,7 +749,6 @@ fviz_pca_var(pca_resultado,
   labs(title = "Contribución de academicas: 3º y 4º dimensión") +
   theme_minimal()
 
-
 ```
 
 ```{r fig.width=10}
@@ -764,18 +757,13 @@ num_vars=poliformat %>% select(where(is.numeric))
 
 num_vars= num_vars[,2:length(num_vars)]
  
-
- 
 datos_pca=num_vars
  
-preprocess=preProcess(datos_pca, method = "medianImpute")
-datos_imputados=predict(preprocess, newdata = datos_pca)
+preprocess=datos_pca
 
  
-pca_poliformat=prcomp(datos_imputados, scale. = TRUE)
+pca_poliformat=prcomp(preprocess, scale. = TRUE)
 
- 
-summary(pca_poliformat)
 fviz_eig(pca_poliformat, addlabels = TRUE, main="PCA Poliformat")
 contrib=factoextra::get_pca_var(pca_poliformat)$contrib
 
@@ -820,8 +808,7 @@ ambas
 ```{r fig.width=10}
  
 num_vars=ambas %>% select(where(is.numeric))
-cat_vars=ambas %>% select(where(is.factor) | where(is.character)) %>% 
-  select(-dni_hash)   
+cat_vars=ambas %>% select(where(is.factor)) 
 
  
 cat_dummies=dummy_cols(cat_vars, remove_first_dummy = TRUE, remove_selected_columns = TRUE)
@@ -832,12 +819,10 @@ datos_pca=bind_cols(num_vars, cat_dummies)
  
 datos_pca=datos_pca[, sapply(datos_pca, function(x) var(x, na.rm = TRUE) > 0)]
 
- 
-preprocess=preProcess(datos_pca, method = "medianImpute")
-datos_imputados=predict(preprocess, newdata = datos_pca)
 
- 
-pca_resultado=prcomp(datos_imputados, scale. = TRUE)
+datos_knn <- VIM::kNN(datos_pca, k = 5, imp_var = FALSE)
+
+pca_resultado=prcomp(datos_knn, scale. = TRUE)
 
 contrib=factoextra::get_pca_var(pca_resultado)$contrib
 var_filtradas=rownames(contrib)[apply(contrib[, 1:2], 1, function(x) any(x > 2))]
@@ -863,32 +848,29 @@ fviz_pca_var(pca_resultado,
 ```
 
 ```{r}
+grupo=as.factor(completo$abandono)
+datos= completo %>% select(-c("abandono"))
 
-completo=sociodemografia %>%
-  left_join(select(academicas,-c("abandono")), by = "dni_hash") %>% 
-  left_join(select(poliformat,-c("abandono")), by="dni_hash")
+cols_con_na_en_abandono=datos %>%
+  select(-dni_hash) %>%
+  select(where(~ any(is.na(.)))) %>%
+  names()
 
+datos=datos %>% select(-all_of(cols_con_na_en_abandono))
 
+num_vars=datos %>% select(where(is.numeric))
+cat_vars=datos %>% select(where(is.factor))
 
-num_vars=completo %>% select(where(is.numeric))
-cat_vars=completo %>% select(where(is.factor) | where(is.character)) %>% 
-  select(-dni_hash)   
-
- 
 cat_dummies=dummy_cols(cat_vars, remove_first_dummy = TRUE, remove_selected_columns = TRUE)
 
- 
-datos_pca=bind_cols(num_vars, cat_dummies)
+datos_pca=bind_cols(num_vars, cat_dummies) %>%
+  select(where(~ var(., na.rm = TRUE) > 0))
 
- 
-datos_pca=datos_pca[, sapply(datos_pca, function(x) var(x, na.rm = TRUE) > 0)]
 
- 
-preprocess=preProcess(datos_pca, method = "medianImpute")
-datos_imputados=predict(preprocess, newdata = datos_pca)
+datos_knn <- VIM::kNN(datos_pca, k = 5, imp_var = FALSE)
 
- 
-pca_resultado=prcomp(datos_imputados, scale. = TRUE)
+pca_resultado=prcomp(datos_knn, scale. = TRUE)
+
 contrib=factoextra::get_pca_var(pca_resultado)$contrib
 var_filtradas=rownames(contrib)[apply(contrib[, 1:2], 1, function(x) any(x > 2))]
 var_filtradas2=rownames(contrib)[apply(contrib[, 3:4], 1, function(x) any(x > 2))]
@@ -913,6 +895,5 @@ fviz_pca_var(pca_resultado,
 
 ```{r}
 save( academicas, sociodemografia, poliformat,abandono,file="../../Datos/Capítulos/Exploratorio.RData")
-save(pca_poliformat,file="../../Datos/Capítulos/pca_poliformat.Rdata")
 ```
 
