@@ -189,18 +189,6 @@ abandono$mes=factor(abandono$mes,ordered =FALSE)
 
 Filtramos por asignaturas del primer cuatrimestre, ya que no tenemos las demás. No conseguí sacarlas mediante web scrapping de la web de la UPV, así que de momento la he cogido a mano. 
 
-```{r}
-codigos_A=c(11540, 11542, 11541, 11545, 11547, 11548, 11549, 11553, 11555, 11557, 11560, 11561, 11563, 11564, 11566, 11570, 11572, 11569, 11574, 11580, 14918, 11584, 11575, 11577, 11593, 11594, 11591, 11590, 11592, 11595, 11596, 11599, 11604, 11603, 11606, 11609, 11608, 11613, 11614, 13762, 13763, 13764, 13765, 11657, 11649, 11645, 11653, 11615, 11616, 13771, 13772, 13773, 13795, 11641, 14066)
-
-
-dataset_ordenado=dataset_ordenado %>%
-  left_join(asignaturas[, c("asi", "asi_hash")], by = "asi_hash") %>%
-  filter(asi %in% codigos_A) %>%
-  select(-asi)
-```
-
-
-
 
 Reparación de valores muy extremos. 
 
@@ -239,10 +227,22 @@ dataset_ordenado=dataset_ordenado %>%
   mutate(across(all_of(columnas_a_sumar), ~ sum(.x, na.rm = TRUE), .names = "{.col}_est")) %>%
   ungroup()
 
-head(dataset_ordenado[,c(73:100,108:131)])
+copia_dataset=dataset_ordenado
 
-
+colnames(dataset_ordenado)
 ```
+
+
+```{r}
+codigos_A=c(11540, 11542, 11541, 11545, 11547, 11548, 11549, 11553, 11555, 11557, 11560, 11561, 11563, 11564, 11566, 11570, 11572, 11569, 11574, 11580, 14918, 11584, 11575, 11577, 11593, 11594, 11591, 11590, 11592, 11595, 11596, 11599, 11604, 11603, 11606, 11609, 11608, 11613, 11614, 13762, 13763, 13764, 13765, 11657, 11649, 11645, 11653, 11615, 11616, 13771, 13772, 13773, 13795, 11641, 14066)
+
+
+dataset_ordenado=dataset_ordenado %>%
+  left_join(asignaturas[, c("asi", "asi_hash")], by = "asi_hash") %>%
+  filter(asi %in% codigos_A) %>%
+  select(-asi)
+```
+
 
 Filtramos ya por informática en el dataset, eliminando el nombre del título y su código hash. 
 
@@ -428,5 +428,70 @@ Guardamos los datos
 save( academicas, sociodemografia, poliformat,abandono, file="../../Datos/Capítulos/Preprocesado.RData")
 ```
 
+Vamos ahora con la copia que hemos hecho para la creación de la base de datos completa
 
+```{r}
+head(copia_dataset)
+```
+
+
+
+```{r}
+mes_abandono_por_alumno=copia_dataset %>%
+  filter(!is.na(baja_fecha)) %>%
+  mutate(mes = month(baja_fecha, label = TRUE, abbr = FALSE),ordered=FALSE) %>%
+  group_by(dni_hash, mes) %>%
+  summarise(asi_left = n(), .groups = "drop") %>%
+  group_by(dni_hash) %>%
+  slice_max(asi_left, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+fecha=copia_dataset %>%
+  filter(!is.na(baja_fecha)) %>%
+  group_by(dni_hash, baja_fecha) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(dni_hash) %>%
+  slice_max(order_by = n, n = 1, with_ties = FALSE) %>%
+  select(-n)
+
+conteo_abandonos=copia_dataset %>%
+  group_by(dni_hash) %>%
+  summarise(
+    asi_left = sum(!is.na(baja_fecha)),
+    abandono = ifelse(asi_left > 5, 1, 0),
+    .groups = "drop"
+  )
+
+abandono=copia_dataset %>%
+  distinct(dni_hash, tit_hash, .keep_all = FALSE) %>%
+  left_join(conteo_abandonos, by = "dni_hash") %>%
+  left_join(fecha, by = "dni_hash") %>%
+  left_join(mes_abandono_por_alumno %>% select(dni_hash, mes), by = "dni_hash")
+
+abandono=abandono[abandono$abandono==1,]
+
+abandono$mes=factor(abandono$mes,ordered =FALSE)
+
+length(unique(abandono$dni_hash))
+
+length(abandono$dni_hash)
+
+```
+Problema: 600 estudiantes están repetidos, probablemente porque se han cambiado de carrera. Lo voy a dejar, pero realmente eso habría que tratarlo. Van a salir muuuchas filas y al concatenar va a ser muchos a muchos y aparecerán muchas más filas.
+
+
+```{r}
+dataset_base=copia_dataset %>% 
+  left_join(select(abandono, c("abandono", "mes", "dni_hash")), by="dni_hash")
+
+
+dataset_base$mees[is.na(dataset_base$mes)]="Continúa"
+dataset_base$abandono[is.na(dataset_base$abandono)]=0
+```
+
+Han salido 13 mil filas más. Bueno, luego me tengo que acordar de preguntar. 
+
+```{r}
+save(dataset_base, file="../../Datos/Capítulos/Dataset_base.Rdata")
+```
 

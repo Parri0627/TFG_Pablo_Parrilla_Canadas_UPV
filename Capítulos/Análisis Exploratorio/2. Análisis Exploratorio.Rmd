@@ -31,6 +31,9 @@ library(fastDummies)
 library(VIM)
 
 load("../../Datos/Capítulos/Preprocesado.RData")
+colnames(academicas)
+colnames(poliformat)
+colnames(sociodemografia)
 ```
 
 

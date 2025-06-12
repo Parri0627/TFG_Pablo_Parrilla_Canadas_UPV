@@ -1,0 +1,114 @@
+---
+title: "6. BBDD Docencia"
+author: "Pablo Parrilla Cañadas"
+date: "2025-06-7"
+output: html_document
+---
+
+
+```{r}
+rm(list=ls())
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(writexl)
+
+load("../../Datos/Capítulos/Dataset_base.Rdata")
+```
+
+```{r}
+ 
+estudiante <- dataset_base %>%
+  select(
+    dni_hash,
+    nacionalitat, data_nac, sexe,
+    alta_universitat, prov_origen,
+    estudios_p, estudios_m,
+    tipo_ingreso, anyo_ingreso, anyo_inicio_estudios,
+    discapacidad, desplazado,
+    exento_npp, es_retitulado, es_adaptado,
+    preferencia_seleccion, becado, abandono,
+    nota10, nota14
+  ) %>%
+  distinct()
+```
+
+  
+```{r}
+ 
+titulo <- dataset_base %>%
+  select(tit_hash, titnom) %>%
+  distinct()
+```
+
+  
+```{r}
+ 
+asignatura <- dataset_base %>%
+  select(asi_hash, asinom) %>%
+  distinct()
+```
+
+  
+```{r}
+ 
+matriculado <- dataset_base %>%
+  mutate(anyo_matricula = as.integer(substring(caca, 1, 4))) %>%
+  select(
+    dni_hash, tit_hash, asi_hash, caca, anyo_matricula,
+    campus, cod_centro,
+    nota_asig,
+    matricula_activa, baja_fecha,
+    curso_mas_bajo, curso_mas_alto,
+    grupos_por_tipocredito
+  )
+```
+
+  
+```{r}
+ 
+creditos <- dataset_base %>%
+  select(dni_hash, asi_hash, tit_hash, caca, starts_with("cred_"))
+
+
+```
+
+  
+```{r}
+ 
+rendimiento=dataset_base %>%
+  select(dni_hash, asi_hash, tit_hash, caca, starts_with("rend_"))
+
+```
+
+  
+```{r}
+cols_interaccion=grep(
+  "^(pft_events|pft_visits|pft_days_logged|pft_total_minutes|n_wifi_days|n_resource_days|resource_events|pft_assignment_submissions|pft_test_submissions)_\\d{4}_\\d{1,2}(_est)?$",
+  names(dataset_base),
+  value = TRUE
+)
+
+
+interaccion_digital=dataset_base %>%
+  select(dni_hash, asi_hash, tit_hash, caca, all_of(cols_interaccion))
+
+```
+
+
+
+```{r}
+write.csv(estudiante, "../../Datos/Capítulos/Base/estudiante.csv", row.names = FALSE)
+write.csv(titulo, "../../Datos/Capítulos/Base/titulo.csv", row.names = FALSE)
+write.csv(asignatura, "../../Datos/Capítulos/Base/asignatura.csv", row.names = FALSE)
+write.csv(matriculado, "../../Datos/Capítulos/Base/matriculado.csv", row.names = FALSE)
+write.csv(creditos, "../../Datos/Capítulos/Base/creditos.csv", row.names = FALSE)
+write.csv(rendimiento, "../../Datos/Capítulos/Base/rendimiento.csv", row.names = FALSE)
+write.csv(interaccion_digital, "../../Datos/Capítulos/Base/actividad_digital.csv", row.names = FALSE)
+
+
+```
+
+
+
+

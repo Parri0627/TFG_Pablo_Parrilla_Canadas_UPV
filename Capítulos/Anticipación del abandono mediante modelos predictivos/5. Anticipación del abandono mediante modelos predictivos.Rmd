@@ -7,7 +7,7 @@ output: pdf_document
 
 Librerías
 
-```{r}
+```{r warning=FALSE}
 rm(list=ls())
 library(dplyr)
 library(fastDummies)
@@ -22,7 +22,13 @@ library(themis)
 library(recipes)
 library(ROSE)
 library(smotefamily)
-
+library(randomForest)
+library(UBL)
+library(rpart)
+library(rpart.plot)
+library(xgboost)
+library(class)
+library(caret)
 ```
 
 ```{r}
@@ -66,8 +72,6 @@ pca_df = pca_poliformat$x[, 1:6]
 # 5. Combinar con ambas_limpio
 final_dataset = as.data.frame(cbind(ambas_limpio[, 2:ncol(ambas_limpio)], pca_df))
 
-# 6. Convertir factores a dummies (excepto abandono)
-library(fastDummies)
 y <- final_dataset$abandono
 X <- final_dataset %>%
   select(-abandono) %>%
@@ -87,21 +91,188 @@ Vamos probar varias técnicas de resampling.
  # Smote
 
 ```{r}
-balanced_data=SMOTE(final_dataset_dummies[,-83],final_dataset_dummies[,83],K = 5,dup_size = 2 )
-datos_sintéticos=balanced_data$syn_data
+balanced_data=SMOTE(final_dataset_dummies[,-83],final_dataset_dummies$abandono,K = 5,dup_size = 2 )
+datos_smote=balanced_data$data
+colnames(datos_smote)[ncol(datos_smote)] <- "abandono"
+table(datos_smote$abandono)
+
 ```
 
 # Rose
 
 ```{r}
-# Calculamos el nuevo total de registros deseado
 n_majority=sum(final_dataset_dummies$abandono==0)
 n_minority_target=52*3
 n_total=n_majority + n_minority_target
 
-# Aplicamos ROSE SOLO para generar datos sintéticos
-rose_out <- ROSE( abandono ~ ., data = final_dataset_dummies, N = n_total, p = n_minority_target/n_total,seed = 20)$data
+rose_out=ROSE( abandono ~ ., data = final_dataset_dummies, N = n_total, p = n_minority_target/n_total,seed = 20)$data
 
 table(rose_out$abandono)
+```
+
+
+Árbol
+
+
+```{r}
+# Con SMOTE
+arbol_smote <- rpart(abandono ~ ., data = datos_smote, method = "class")
+rpart.plot(arbol_smote)
+printcp(arbol_smote)
+
+# Con ROSE
+arbol_rose <- rpart(abandono ~ ., data = rose_out, method = "class")
+rpart.plot(arbol_rose)
+printcp(arbol_rose)
+```
+
+Random Forest
+
+```{r fig.height=6.5}
+# SMOTE
+datos_smoke_rf=datos_smote
+rose_out_rf=rose_out
+
+datos_smoke_rf$abandono=as.numeric(datos_smoke_rf$abandono)
+rose_out_rf$abandono=as.numeric(rose_out_rf$abandono)
+rose_out_rf$abandono=rose_out_rf$abandono-1
+
+rf_smote <- randomForest(abandono ~ ., data = datos_smoke_rf, importance = TRUE)
+print(rf_smote)
+varImpPlot(rf_smote)
+
+# ROSE
+rf_rose <- randomForest(abandono ~ ., data = rose_out_rf, importance = TRUE)
+print(rf_rose)
+varImpPlot(rf_rose)
+```
+
+gboost
+
+```{r}
+# Preparar matrices
+X_smote <- model.matrix(abandono ~ ., data = datos_smote)
+y_smote <- as.numeric(datos_smote$abandono) 
+
+X_rose <- model.matrix(abandono ~ ., data = rose_out_rf)
+y_rose <- as.numeric(rose_out_rf$abandono)
+
+# SMOTE
+xgb_smote <- xgboost(data = X_smote, label = y_smote, nrounds = 100, objective = "binary:logistic", verbose = 0)
+# ROSE
+xgb_rose <- xgboost(data = X_rose, label = y_rose, nrounds = 100, objective = "binary:logistic", verbose = 0)
+```
+
+
+Regresión Logística
+
+```{r}
+glm_smote <- glm(abandono ~ ., data = datos_smoke_rf, family = "binomial")
+summary(glm_smote)
+
+# ROSE
+glm_rose <- glm(abandono ~ ., data = rose_out_rf, family = "binomial")
+summary(glm_rose)
+```
+
+
+```{r}
+# Preprocesado
+preproc_smote <- preProcess(select(datos_smote, -abandono), method = c("center", "scale"))
+X_knn_smote <- predict(preproc_smote, select(datos_smote, -abandono))
+y_knn_smote <- datos_smote$abandono
+
+preproc_rose <- preProcess(select(rose_out, -abandono), method = c("center", "scale"))
+X_knn_rose <- predict(preproc_rose, select(rose_out, -abandono))
+y_knn_rose <- rose_out$abandono
+
+# Entrenar/test split
+set.seed(123)
+trainIndex <- createDataPartition(y_knn_smote, p = .8, list = FALSE)
+
+# SMOTE
+knn_smote_pred <- knn(train = X_knn_smote[trainIndex,], test = X_knn_smote[-trainIndex,],
+                      cl = y_knn_smote[trainIndex], k = 5)
+
+# Convertir ambos a factores con los mismos niveles
+pred_f_smote <- factor(knn_smote_pred, levels = c(0,1))
+true_f_smote <- factor(y_knn_smote[-trainIndex], levels = c(0,1))
+
+confusionMatrix(pred_f_smote, true_f_smote,positive = "1")
+
+
+print("")
+
+# ROSE
+trainIndex2 <- createDataPartition(y_knn_rose, p = .8, list = FALSE)
+knn_rose_pred <- knn(train = X_knn_rose[trainIndex2,], test = X_knn_rose[-trainIndex2,],
+                     cl = y_knn_rose[trainIndex2], k = 5)
+
+pred_f_rose <- factor(knn_rose_pred, levels = c(0,1))
+true_f_rose <- factor(y_knn_rose[-trainIndex2], levels = c(0,1))
+
+confusionMatrix(pred_f_rose, true_f_rose, positive="1")
+```
+
+```{r}
+datos=datos_smoke_rf
+
+grupo <- as.factor(datos$abandono)
+datos <- datos %>% select(-abandono)
+
+cols_con_na_en_abandono <- datos %>%
+  select(where(~ any(is.na(.)))) %>%
+  names()
+
+datos <- datos %>% select(-all_of(cols_con_na_en_abandono))
+
+num_vars <- datos %>% select(where(is.numeric))
+
+datos_pca <- datos %>%
+  select(where(~ var(., na.rm = TRUE) > 0))
+
+pca_result <- prcomp(datos_pca, scale. = TRUE)
+```
+
+
+```{r}
+
+a=fviz_pca_ind(pca_result,
+             geom.ind = "point",
+             col.ind = grupo,
+             palette = c("steelblue", "tomato"),
+             addEllipses = TRUE,
+             legend.title = "Abandono") +
+  theme_minimal()
+
+b=fviz_pca_ind(pca_result,
+             geom.ind = "point",
+             col.ind = grupo,
+             palette = c("steelblue", "tomato"),
+             addEllipses = TRUE,
+             legend.title = "Abandono",axes=c(3,4)) +
+            
+  theme_minimal()
+
+
+c=fviz_pca_ind(pca_result,
+             geom.ind = "point",
+             col.ind = grupo,
+             palette = c("steelblue", "tomato"),
+             addEllipses = TRUE,
+             legend.title = "Abandono",axes=c(5,6)) +
+            
+  theme_minimal()
+
+d=fviz_pca_ind(pca_result,
+             geom.ind = "point",
+             col.ind = grupo,
+             palette = c("steelblue", "tomato"),
+             addEllipses = TRUE,
+             legend.title = "Abandono",axes=c(7,8)) +
+            
+  theme_minimal()
+
+grid.arrange(a,b,c,d,ncol=2)
 ```
 
