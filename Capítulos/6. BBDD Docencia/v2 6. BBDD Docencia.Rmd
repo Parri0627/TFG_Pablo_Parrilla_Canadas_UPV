@@ -1,0 +1,201 @@
+---
+title: "6. BBDD Docencia"
+author: "Pablo Parrilla Cañadas"
+date: "2025-06-7"
+output: html_document
+---
+
+
+```{r}
+rm(list=ls())
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(writexl)
+
+load("../../Datos/Capítulos/Dataset_base.Rdata")
+
+```
+
+
+```{r}
+# Estudiante
+estudiante=dataset_base %>%
+  select(
+    dni_hash, nacionalitat, data_nac, sexe, alta_universitat, prov_origen,
+    estudios_p, estudios_m, tipo_ingreso, anyo_ingreso, anyo_inicio_estudios,
+    discapacidad, desplazado, exento_npp, es_retitulado, es_adaptado,
+    preferencia_seleccion, becado, abandono, nota10, nota14
+  ) %>%
+  distinct()
+
+```
+
+```{r}
+# Titulo
+titulo=dataset_base %>%
+  select(tit_hash, titnom) %>%
+  distinct()
+
+```
+
+```{r}
+# Asignatura
+asignatura=dataset_base %>%
+  select(asi_hash, asinom) %>%
+  distinct()
+
+```
+
+```{r}
+# Cursa
+cursa=dataset_base %>%
+  group_by(dni_hash, tit_hash, caca) %>%
+  mutate(cod_cursa = paste0("cod_cursa_", cur_group_id())) %>%
+  ungroup() %>%
+  select(cod_cursa, dni_hash, tit_hash, caca) %>%
+  distinct()
+
+```
+
+
+```{r}
+matricula=dataset_base %>%
+  group_by(dni_hash, tit_hash, caca) %>%
+  mutate(
+    cod_cursa = paste0("cod_cursa_", cur_group_id())
+  ) %>%
+  ungroup() %>%
+  mutate(
+    cod_matricula = paste0("mat_", row_number())
+  ) %>%
+  select(
+    cod_matricula, cod_cursa, asi_hash,
+    campus, cod_centro, nota_asig,
+    matricula_activa, baja_fecha,
+    curso_mas_bajo, curso_mas_alto,
+    grupos_por_tipocredito
+  )
+
+```
+
+
+```{r}
+# Comportamiento_digital_asignatura
+comportamiento_digital_asignatura=dataset_base %>%
+  group_by(dni_hash, tit_hash, caca) %>%
+  mutate(cod_cursa = paste0("cod_cursa_", cur_group_id())) %>%
+  ungroup() %>%
+  select(
+    cod_cursa,
+    evento_poliformat_asg, loggins_asg, visitas_asg,
+    minutos_asg, n_res_day_asg, n_res_events_asg,
+    asign_asg, test_asg
+  )
+
+```
+
+
+```{r}
+# Rendimientos
+rendimientos=dataset_base %>%
+  group_by(dni_hash, tit_hash, caca) %>%
+  mutate(cod_cursa = paste0("cod_cursa_", cur_group_id())) %>%
+  ungroup() %>%
+  select(
+    cod_cursa,
+    rendimiento_cuat_a, rendimiento_total,
+    rend_total_ultimo, rend_total_penultimo, rend_total_antepenultimo
+  )
+
+```
+
+```{r}
+# Digital_est
+cols_digital_est=grep("(\\_est$|^n_wifi_days_\\d{4}_\\d{1,2}$)", names(dataset_base), value = TRUE)
+
+digital_est=dataset_base %>%
+  group_by(dni_hash, tit_hash, caca) %>%
+  mutate(cod_cursa = paste0("cod_cursa_", cur_group_id())) %>%
+  ungroup() %>%
+  select(cod_cursa, all_of(cols_digital_est))
+
+```
+
+```{r}
+# Digital_estudiante
+cols_digital=grep("^(pft_events|pft_visits|pft_days_logged|pft_total_minutes|n_resource_days|resource_events|pft_assignment_submissions|pft_test_submissions)_\\d{4}_\\d{1,2}",
+                     names(dataset_base), value = TRUE)
+
+digital_asg=dataset_base %>%
+  group_by(dni_hash, tit_hash, caca) %>%
+  mutate(cod_cursa = paste0("cod_cursa_", cur_group_id())) %>%
+  ungroup() %>%
+  select(cod_cursa, all_of(cols_digital))
+
+```
+
+
+```{r}
+# Creditos_matriculados
+creditos_matriculados=dataset_base %>%
+  group_by(dni_hash, tit_hash, caca) %>%
+  mutate(cod_cursa = paste0("cod_cursa_", cur_group_id())) %>%
+  ungroup() %>%
+  select(
+    cod_cursa,
+    cred_mat_total, cred_mat_practicas,
+    cred_mat1, cred_mat2, cred_mat3, cred_mat4, cred_mat5, cred_mat6,
+    cred_mat_sem_a, cred_mat_sem_b, cred_mat_anu,
+    cred_mat_normal, cred_mat_movilidad
+  )
+
+```
+
+```{r}
+# Creditos_superados
+creditos_superados=dataset_base %>%
+  group_by(dni_hash, tit_hash, caca) %>%
+  mutate(cod_cursa = paste0("cod_cursa_", cur_group_id())) %>%
+  ungroup() %>%
+  select(
+    cod_cursa,
+    cred_sup_total, cred_sup_normal, cred_sup_espec, cred_sup,
+    cred_sup_1o, cred_sup_2o, cred_sup_3o, cred_sup_4o, cred_sup_5o, cred_sup_6o,
+    cred_sup_sem_a, cred_sup_sem_b, cred_sup_anu,
+    cred_sup_tit, cred_pend_sup_tit
+  )
+
+```
+
+
+```{r}
+# Creditos_resumen
+creditos_resumen=dataset_base %>%
+  group_by(dni_hash, tit_hash, caca) %>%
+  mutate(cod_cursa = paste0("cod_cursa_", cur_group_id())) %>%
+  ungroup() %>%
+  select(
+    cod_cursa,
+    ajuste, practicas, actividades,total1, asig1, pract1, activ1, ajuste1
+  )
+
+```
+
+
+
+```{r}
+write.csv(estudiante, "../../Datos/Capítulos/Base/estudiante.csv", row.names = FALSE)
+write.csv(titulo, "../../Datos/Capítulos/Base/titulo.csv", row.names = FALSE)
+write.csv(asignatura, "../../Datos/Capítulos/Base/asignatura.csv", row.names = FALSE)
+write.csv(cursa, "../../Datos/Capítulos/Base/cursa.csv", row.names = FALSE)
+write.csv(matricula, "../../Datos/Capítulos/Base/matricula.csv", row.names = FALSE)
+write.csv(rendimientos, "../../Datos/Capítulos/Base/rendimiento.csv", row.names = FALSE)
+write.csv(creditos_matriculados, "../../Datos/Capítulos/Base/creditos_matriculados.csv", row.names = FALSE)
+write.csv(creditos_superados, "../../Datos/Capítulos/Base/creditos_superados.csv", row.names = FALSE)
+write.csv(creditos_resumen, "../../Datos/Capítulos/Base/creditos_resumen.csv", row.names = FALSE)
+write.csv(actividad_digital_estudiante, "../../Datos/Capítulos/Base/actividad_digital_estudiante.csv", row.names = FALSE)
+write.csv(actividad_digital_asignatura, "../../Datos/Capítulos/Base/actividad_digital_asignatura.csv", row.names = FALSE)
+
+```
+

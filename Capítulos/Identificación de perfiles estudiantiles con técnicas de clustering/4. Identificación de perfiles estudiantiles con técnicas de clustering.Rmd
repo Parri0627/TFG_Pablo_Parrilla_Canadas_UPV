@@ -34,7 +34,7 @@ num_vars= num_vars[,2:length(num_vars)]
 datos_pca <- num_vars
  
  
-datos_filtrados <- datos_imputados[, sapply(datos_pca, function(col) var(col, na.rm = TRUE) != 0)]
+datos_filtrados <- datos_pca[, sapply(datos_pca, function(col) var(col, na.rm = TRUE) != 0)]
 
 
  
