@@ -53,7 +53,7 @@ cursa=dataset_base %>%
   group_by(dni_hash, tit_hash, caca) %>%
   mutate(cod_cursa = paste0("cod_cursa_", cur_group_id())) %>%
   ungroup() %>%
-  select(cod_cursa, dni_hash, tit_hash, caca) %>%
+  select(cod_cursa, dni_hash, tit_hash, caca, campus, cod_centro, curso_mas_bajo, curso_mas_alto,rendimiento_total,abandono) %>%
   distinct()
 
 ```
@@ -71,9 +71,8 @@ matricula=dataset_base %>%
   ) %>%
   select(
     cod_matricula, cod_cursa, asi_hash,
-    campus, cod_centro, nota_asig,
+     nota_asig,
     matricula_activa, baja_fecha,
-    curso_mas_bajo, curso_mas_alto,
     grupos_por_tipocredito
   )
 
@@ -97,20 +96,6 @@ comportamiento_digital_asignatura=dataset_base %>%
 
 
 ```{r}
-# Rendimientos
-rendimientos=dataset_base %>%
-  group_by(dni_hash, tit_hash, caca) %>%
-  mutate(cod_cursa = paste0("cod_cursa_", cur_group_id())) %>%
-  ungroup() %>%
-  select(
-    cod_cursa,
-    rendimiento_cuat_a, rendimiento_total,
-    rend_total_ultimo, rend_total_penultimo, rend_total_antepenultimo
-  )
-
-```
-
-```{r}
 # Digital_est
 cols_digital_est=grep("(\\_est$|^n_wifi_days_\\d{4}_\\d{1,2}$)", names(dataset_base), value = TRUE)
 
@@ -129,7 +114,7 @@ cols_digital=grep("^(pft_events|pft_visits|pft_days_logged|pft_total_minutes|n_r
 
 digital_asg=dataset_base %>%
   group_by(dni_hash, tit_hash, caca) %>%
-  mutate(cod_cursa = paste0("cod_cursa_", cur_group_id())) %>%
+  mutate(cod_cursa = paste0("cod_matricula_", cur_group_id())) %>%
   ungroup() %>%
   select(cod_cursa, all_of(cols_digital))
 
@@ -190,12 +175,16 @@ write.csv(titulo, "../../Datos/Capítulos/Base/titulo.csv", row.names = FALSE)
 write.csv(asignatura, "../../Datos/Capítulos/Base/asignatura.csv", row.names = FALSE)
 write.csv(cursa, "../../Datos/Capítulos/Base/cursa.csv", row.names = FALSE)
 write.csv(matricula, "../../Datos/Capítulos/Base/matricula.csv", row.names = FALSE)
-write.csv(rendimientos, "../../Datos/Capítulos/Base/rendimiento.csv", row.names = FALSE)
 write.csv(creditos_matriculados, "../../Datos/Capítulos/Base/creditos_matriculados.csv", row.names = FALSE)
 write.csv(creditos_superados, "../../Datos/Capítulos/Base/creditos_superados.csv", row.names = FALSE)
 write.csv(creditos_resumen, "../../Datos/Capítulos/Base/creditos_resumen.csv", row.names = FALSE)
-write.csv(actividad_digital_estudiante, "../../Datos/Capítulos/Base/actividad_digital_estudiante.csv", row.names = FALSE)
-write.csv(actividad_digital_asignatura, "../../Datos/Capítulos/Base/actividad_digital_asignatura.csv", row.names = FALSE)
+write.csv(digital_est, "../../Datos/Capítulos/Base/actividad_digital_estudiante.csv", row.names = FALSE)
+write.csv(digital_asg, "../../Datos/Capítulos/Base/actividad_digital_asignatura.csv", row.names = FALSE)
 
+```
+
+
+```{r}
+dataset_base$rendimiento
 ```
 
